@@ -16,7 +16,7 @@
   #main { flex: 1; display: flex; flex-direction: column; padding: 10px; box-sizing: border-box; }
   #videoUrl { padding: 8px; margin-bottom: 10px; border-radius: 5px; border: 1px solid #444; background: #222; color: white; width: 100%; box-sizing: border-box; }
   #loadVideo { padding: 8px 12px; margin-bottom: 10px; border: none; border-radius: 5px; background: #28a745; color: white; cursor: pointer; }
-  #player { flex: 1; width: 100%; border: none; border-radius: 8px; }
+  #player { flex: 1; width: 100%; border: none; border-radius: 8px; min-height: 400px; }
 </style>
 </head>
 <body>
@@ -27,9 +27,9 @@
 </div>
 
 <div id="main">
-  <input id="videoUrl" type="text" placeholder="Vlož YouTube video nebo playlist URL...">
-  <button id="loadVideo">Načíst Video / Playlist</button>
-  <iframe id="player" src="" allow="autoplay"></iframe>
+  <input id="videoUrl" type="text" placeholder="Vlož ID videa (např. mzrdbF-TwFo)">
+  <button id="loadVideo">Načíst Video</button>
+  <iframe id="player" allow="autoplay"></iframe>
 </div>
 
 <script>
@@ -83,7 +83,7 @@ function joinRoomPrompt() {
       username = prompt("Zadej svoje jméno:");
       db.ref(`rooms/${roomCode}`).set({
         users: { [Date.now()]: username },
-        state: { playing: false, time: 0, currentVideo: null, playlist: [] }
+        state: { playing: false, time: 0, currentVideo: null }
       });
       listenRoom();
       alert(`Místnost vytvořena! Tvůj kód: ${roomCode}`);
@@ -104,41 +104,17 @@ function listenRoom() {
 
   db.ref(`rooms/${roomCode}/state`).on("value", s => {
     const st = s.val(); if (!st) return;
-
-    // Synchronizace videa nebo playlistu
     if (st.currentVideo) {
       if (Math.abs(player.getCurrentTime() - st.time) > 1) player.seekTo(st.time, true);
       if (st.playing) player.playVideo(); else player.pauseVideo();
     }
-    // Pokud je playlist
-    if (st.playlist && st.playlist.length > 0) {
-      player.loadPlaylist({ list: st.playlist, listType: 'playlist', index: 0 });
-    }
   });
 }
 
-function getYouTubeIDorPlaylist(url) {
-  url = url.trim();
-  const vMatch = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
-  if (vMatch) return { type: 'video', id: vMatch[1] };
-  const listMatch = url.match(/[?&]list=([a-zA-Z0-9_-]+)/);
-  if (listMatch) return { type: 'playlist', id: listMatch[1] };
-  const shortMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
-  if (shortMatch) return { type: 'video', id: shortMatch[1] };
-  return null;
-}
-
 document.getElementById("loadVideo").onclick = () => {
-  const url = document.getElementById("videoUrl").value;
-  const res = getYouTubeIDorPlaylist(url);
-  if (!res) return alert("URL není validní.");
-  
-  if (res.type === 'video') {
-    db.ref(`rooms/${roomCode}/state`).update({ currentVideo: res.id, playlist: [], playing: true, time: 0 });
-  }
-  if (res.type === 'playlist') {
-    db.ref(`rooms/${roomCode}/state`).update({ currentVideo: null, playlist: [res.id], playing: true, time: 0 });
-  }
+  const id = document.getElementById("videoUrl").value.trim();
+  if (!id || id.length !== 11) return alert("Zadej platné 11-místné ID videa (např. mzrdbF-TwFo)");
+  db.ref(`rooms/${roomCode}/state`).update({ currentVideo: id, playing: true, time: 0 });
 };
 
 window.onload = joinRoomPrompt;
