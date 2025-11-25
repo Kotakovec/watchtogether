@@ -127,10 +127,10 @@ function listenRoom() {
 
 function extractVideoID(url) {
   url = url.trim();
-  // v= param
+  // klasický parametr v=
   let match = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
   if (match) return match[1];
-  // youtu.be short link
+  // krátký youtu.be odkaz
   match = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
   if (match) return match[1];
   // samotné ID
