@@ -113,11 +113,12 @@ function listenRoom() {
 
 // Video loader
 document.getElementById("loadVideo").onclick = () => {
-  const url = document.getElementById("videoUrl").value;
-  const id = url.split("v=")[1]?.split("&")[0];
+  const url = document.getElementById("videoUrl").value.trim();
+  const id = getYouTubeID(url);
   if (!id) return alert("URL není validní.");
   player.loadVideoById(id);
 };
+
 
 // Spustíme prompt hned po načtení stránky
 window.onload = joinRoomPrompt;
