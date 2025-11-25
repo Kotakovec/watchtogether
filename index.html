@@ -140,6 +140,7 @@ function extractVideoID(url) {
 
 function loadVideoByID(id) {
   if (!readyToLoadVideo) { pendingVideoID = id; return; }
+  if (!id || id.length !== 11) { alert("Nelze načíst video – zkontroluj odkaz nebo ID."); return; }
   player.loadVideoById(id);
   pendingVideoID = null;
 }
@@ -147,7 +148,7 @@ function loadVideoByID(id) {
 document.getElementById("loadVideo").onclick = () => {
   const input = document.getElementById("videoUrl").value;
   const id = extractVideoID(input);
-  if (!id) return alert("Nelze rozpoznat ID videa.");
+  if (!id) return alert("Nelze rozpoznat ID videa – zadej správný odkaz nebo ID.");
   db.ref(`rooms/${roomCode}/state`).update({ currentVideo: id, playing: true, time: 0 });
 };
 
