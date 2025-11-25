@@ -27,7 +27,7 @@
 </div>
 
 <div id="main">
-  <input id="videoUrl" type="text" placeholder="Vlož ID videa (např. mzrdbF-TwFo)">
+  <input id="videoUrl" type="text" placeholder="Vlož YouTube odkaz nebo ID videa">
   <button id="loadVideo">Načíst Video</button>
   <div id="player"></div>
 </div>
@@ -56,10 +56,13 @@ function onYouTubeIframeAPIReady() {
   player = new YT.Player("player", {
     height: '400',
     width: '100%',
-    events: { onStateChange: syncState, onReady: () => {
-      readyToLoadVideo = true;
-      if(pendingVideoID) loadVideoByID(pendingVideoID);
-    }}
+    events: { 
+      onStateChange: syncState,
+      onReady: () => {
+        readyToLoadVideo = true;
+        if(pendingVideoID) loadVideoByID(pendingVideoID);
+      }
+    }
   });
 }
 
@@ -115,10 +118,24 @@ function listenRoom() {
     const st = s.val(); if (!st) return;
     if (st.currentVideo) {
       if (readyToLoadVideo) loadVideoByID(st.currentVideo);
+      else pendingVideoID = st.currentVideo;
     }
     if (st.playing) player.playVideo(); else player.pauseVideo();
     if (Math.abs(player.getCurrentTime() - st.time) > 1) player.seekTo(st.time, true);
   });
+}
+
+function extractVideoID(url) {
+  url = url.trim();
+  // v= param
+  let match = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+  if (match) return match[1];
+  // youtu.be short link
+  match = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+  if (match) return match[1];
+  // samotné ID
+  if (/^[a-zA-Z0-9_-]{11}$/.test(url)) return url;
+  return null;
 }
 
 function loadVideoByID(id) {
@@ -128,8 +145,9 @@ function loadVideoByID(id) {
 }
 
 document.getElementById("loadVideo").onclick = () => {
-  const id = document.getElementById("videoUrl").value.trim();
-  if (!id || id.length !== 11) return alert("Zadej platné 11-místné ID videa (např. mzrdbF-TwFo)");
+  const input = document.getElementById("videoUrl").value;
+  const id = extractVideoID(input);
+  if (!id) return alert("Nelze rozpoznat ID videa.");
   db.ref(`rooms/${roomCode}/state`).update({ currentVideo: id, playing: true, time: 0 });
 };
 
