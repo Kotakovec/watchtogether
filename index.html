@@ -1,158 +1,107 @@
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-<meta charset="UTF-8">
-<title>Společné sledování videa</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<style>
-    body {
-        margin: 0;
-        padding: 0;
-        display: flex;
-        height: 100vh;
-        background: #121212;
-        color: white;
-        font-family: Arial, sans-serif;
-    }
-
-    /* Levý panel */
-    .sidebar {
-        width: 260px;
-        background: #1e1e1e;
-        border-right: 2px solid #333;
-        padding: 20px;
-        box-sizing: border-box;
-        display: flex;
-        flex-direction: column;
-    }
-
-    .invite-btn {
-        padding: 10px;
-        background: #3a8bff;
-        border: none;
-        border-radius: 6px;
-        color: white;
-        font-size: 16px;
-        cursor: pointer;
-        margin-bottom: 20px;
-        transition: 0.2s;
-    }
-    .invite-btn:hover {
-        background: #6aa8ff;
-    }
-
-    .user-section {
-        margin-top: 10px;
-    }
-
-    .user {
-        padding: 10px;
-        background: #2c2c2c;
-        border-radius: 8px;
-        margin-bottom: 10px;
-    }
-
-    /* Hlavní část */
-    .main {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        padding: 20px;
-        box-sizing: border-box;
-    }
-
-    .search-bar {
-        display: flex;
-        margin-bottom: 20px;
-    }
-
-    .search-bar input {
-        flex: 1;
-        padding: 12px;
-        border-radius: 8px 0 0 8px;
-        border: none;
-        outline: none;
-        font-size: 16px;
-    }
-
-    .search-bar button {
-        padding: 12px 20px;
-        background: #3a8bff;
-        border: none;
-        border-radius: 0 8px 8px 0;
-        color: white;
-        font-size: 16px;
-        cursor: pointer;
-        transition: 0.2s;
-    }
-
-    .search-bar button:hover {
-        background: #6aa8ff;
-    }
-
-    iframe {
-        width: 100%;
-        height: 100%;
-        border-radius: 12px;
-        border: none;
-    }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Watch Together – Firebase</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <style>
+    body { margin: 0; font-family: Arial; background: #0d0d0d; color: white; display: flex; height: 100vh; }
+    #sidebar { width: 250px; min-width: 150px; max-width: 400px; background: #111; border-right: 2px solid #222; padding: 10px; box-sizing: border-box; overflow-y: auto; resize: horizontal; }
+    #sidebar h2 { margin-top: 10px; margin-bottom: 5px; }
+    #sidebar ul { padding-left: 0; list-style: none; }
+    #sidebar ul li { margin-bottom: 5px; padding: 5px; background: rgba(255,255,255,0.05); border-radius: 4px; }
+    #main { flex: 1; display: flex; flex-direction: column; padding: 10px; box-sizing: border-box; }
+    #videoUrl { padding: 8px; margin-bottom: 10px; border-radius: 5px; border: 1px solid #444; background: #222; color: white; width: 100%; box-sizing: border-box; }
+    #loadVideo { padding: 8px 12px; margin-bottom: 10px; border: none; border-radius: 5px; background: #28a745; color: white; cursor: pointer; }
+    #player { flex: 1; width: 100%; border: none; border-radius: 8px; }
+  </style>
 </head>
 <body>
 
-<!-- Sidebar -->
-<div class="sidebar">
-    <button class="invite-btn" onclick="inviteUser()">Pozvat</button>
+  <div id="sidebar">
+    <button id="inviteBtn" style="width:100%; padding:8px; margin-bottom:10px; background:#2563eb; border:none; border-radius:5px; color:white; cursor:pointer;">Pozvat / Připojit se</button>
+    <h2>Lidi</h2>
+    <ul id="usersList"></ul>
+  </div>
 
-    <div class="user-section">
-        <h3>Ty</h3>
-        <div class="user">Jakub (Ty)</div>
-    </div>
+  <div id="main">
+    <input id="videoUrl" type="text" placeholder="Vlož YouTube URL...">
+    <button id="loadVideo">Načíst Video</button>
+    <iframe id="player" src="" allow="autoplay"></iframe>
+  </div>
 
-    <div class="user-section">
-        <h3>Další lidé:</h3>
-        <div id="viewerList"></div>
-    </div>
-</div>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBn6sJX5f9MIIXUSBWJDEc2zsDkr5Z7O0o",
+      authDomain: "watchtogether-e67a5.firebaseapp.com",
+      databaseURL: "https://watchtogether-e67a5-default-rtdb.firebaseio.com",
+      projectId: "watchtogether-e67a5",
+      storageBucket: "watchtogether-e67a5.appspot.com",
+      messagingSenderId: "928834764710",
+      appId: "1:928834764710:web:2b2bc562d7dd6f0e33d967",
+      measurementId: "G-CN7C9VT3GG"
+    };
 
-<!-- Main content -->
-<div class="main">
-    <div class="search-bar">
-        <input id="videoURL" type="text" placeholder="Vlož URL YouTube videa...">
-        <button onclick="loadVideo()">Načíst</button>
-    </div>
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-    <iframe id="player" src="" allowfullscreen></iframe>
-</div>
+    let roomCode = null;
+    let username = null;
+    let player;
 
-<script>
-function loadVideo() {
-    let url = document.getElementById("videoURL").value;
-
-    // Z URL vytáhneme ID videa
-    const reg = /(?:youtube\.com.*v=|youtu\.be\/)([^&]+)/;
-    const match = url.match(reg);
-
-    if (!match) {
-        alert("Neplatná URL YouTube videa");
-        return;
+    function onYouTubeIframeAPIReady() {
+      player = new YT.Player("player", { events: { onStateChange: syncState } });
     }
 
-    const videoId = match[1];
-    document.getElementById("player").src = "https://www.youtube.com/embed/" + videoId;
-}
+    function syncState(event) {
+      if (!roomCode) return;
+      if (event.data === YT.PlayerState.PLAYING) {
+        db.ref(`rooms/${roomCode}/state`).update({ playing: true, time: player.getCurrentTime() });
+      }
+      if (event.data === YT.PlayerState.PAUSED) {
+        db.ref(`rooms/${roomCode}/state`).update({ playing: false, time: player.getCurrentTime() });
+      }
+    }
 
-function inviteUser() {
-    let name = prompt("Zadej jméno uživatele, kterého chceš přidat:");
-    if (!name) return;
+    document.getElementById("inviteBtn").onclick = () => {
+      const m = confirm("Chceš vytvořit místnost? (OK) nebo se připojit? (Cancel)");
+      if (m) {
+        roomCode = Math.floor(100000 + Math.random() * 900000).toString();
+        username = prompt("Zadej svoje jméno:");
+        db.ref(`rooms/${roomCode}`).set({ users: { [Date.now()]: username }, state: { playing: false, time: 0 } });
+        alert("Tvůj kód místnosti: " + roomCode);
+        listenRoom();
+      } else {
+        roomCode = prompt("Zadej kód místnosti:");
+        username = prompt("Zadej své jméno:");
+        db.ref(`rooms/${roomCode}/users`).push(username);
+        listenRoom();
+      }
+    };
 
-    let div = document.createElement("div");
-    div.className = "user";
-    div.textContent = name;
-    document.getElementById("viewerList").appendChild(div);
-}
-</script>
+    function listenRoom() {
+      db.ref(`rooms/${roomCode}/users`).on("value", snap => {
+        const list = document.getElementById("usersList");
+        list.innerHTML = "";
+        snap.forEach(u => { const li = document.createElement("li"); li.textContent = u.val(); list.appendChild(li); });
+      });
 
+      db.ref(`rooms/${roomCode}/state`).on("value", s => {
+        const st = s.val(); if (!st) return;
+        if (Math.abs(player.getCurrentTime() - st.time) > 1) player.seekTo(st.time, true);
+        if (st.playing) player.playVideo(); else player.pauseVideo();
+      });
+    }
+
+    document.getElementById("loadVideo").onclick = () => {
+      const url = document.getElementById("videoUrl").value;
+      const id = url.split("v=")[1]?.split("&")[0];
+      if (!id) return alert("URL není validní.");
+      player.loadVideoById(id);
+    };
+  </script>
 </body>
 </html>
