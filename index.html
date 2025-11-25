@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Společné Sledování YouTube</title>
+    <style>
+        /* Základní rozložení pomocí Flexbox */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex; /* Použijeme flexbox pro hlavní rozložení */
+            height: 100vh;
+            background-color: #f0f2f5;
+        }
+
+        /* Levý sloupec pro uživatele */
+        .sidebar {
+            width: 300px;
+            padding: 20px;
+            background-color: #ffffff;
+            border-right: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar h2 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        .invite-button {
+            padding: 10px;
+            background-color: #ff0000; /* YouTube barva */
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-bottom: 20px;
+            transition: background-color 0.2s;
+        }
+
+        .invite-button:hover {
+            background-color: #cc0000;
+        }
+
+        /* Seznam uživatelů */
+        .user-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            overflow-y: auto; /* Pro případ, že by bylo moc lidí */
+        }
+
+        .user-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+            font-weight: bold;
+        }
+
+        .user-list li:first-child {
+            color: #007bff; /* Tvoje zvýrazněné jméno */
+        }
+
+        .user-list li:last-child {
+            border-bottom: none;
+        }
+
+        /* Hlavní obsah (video a vyhledávání) */
+        .main-content {
+            flex-grow: 1; /* Zabere zbývající prostor */
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Vyhledávací lišta */
+        .search-container {
+            width: 100%;
+            max-width: 800px;
+            margin-bottom: 20px;
+            display: flex;
+        }
+
+        .search-container input[type="text"] {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px 0 0 5px;
+            font-size: 16px;
+        }
+
+        .search-container button {
+            padding: 10px 15px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 0 5px 5px 0;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .search-container button:hover {
+            background-color: #218838;
+        }
+
+        /* Kontejner pro YouTube přehrávač (pro responzivitu) */
+        .video-container {
+            width: 100%;
+            max-width: 800px;
+            /* Triky pro udržení poměru stran 16:9 */
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 = (9/16) * 100% = 56.25% */
+            height: 0;
+            overflow: hidden;
+            background-color: black;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        #youtube-player {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none; /* Skryjeme rámeček iframe */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <h2>Účastníci</h2>
+
+        <button class="invite-button" onclick="alert('Tady by se zobrazil odkaz pro pozvání!');">
+            🔗 Pozvat do místnosti
+        </button>
+
+        <ul class="user-list" id="user-list">
+            <li>🧑 **Kuba (Ty)**</li>
+            <li>🤖 Gemini</li>
+            <li>👥 Kamarád 1</li>
+            <li>👥 Kamarád 2</li>
+        </ul>
+    </div>
+
+    <div class="main-content">
+
+        <div class="search-container">
+            <input type="text" id="video-url" placeholder="Vlož URL YouTube videa sem..." value="https://www.youtube.com/watch?v=dQw4w9WgXcQ">
+            <button onclick="loadVideo()">Přehrát</button>
+        </div>
+
+        <div class="video-container">
+            <div id="youtube-player"></div>
+        </div>
+
+        <p style="margin-top: 20px; color: #666;">
+            **DŮLEŽITÉ:** Tato stránka je jen vizuální kostra. Pro skutečnou synchronizaci je nutné přidat backend (server) a WebSockety.
+        </p>
+    </div>
+
+    <script>
+        // 1. Zavedení YouTube API do stránky
+        var tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        var firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+        var player; // Proměnná pro uložení přehrávače
+
+        // 2. Funkce, která se zavolá, jakmile je API připravené
+        function onYouTubeIframeAPIReady() {
+            // Při startu načteme výchozí video (zadané v HTML inputu)
+            loadVideo();
+        }
+
+        // 3. Funkce pro vytvoření (nebo aktualizaci) přehrávače
+        function loadVideo() {
+            const urlInput = document.getElementById('video-url').value;
+            // Extrakce ID videa z URL - zkusí vybrat kód za v= nebo youtu.be/
+            const videoIdMatch = urlInput.match(/(?:youtu\.be\/|v=)([a-zA-Z0-9_-]{11})/);
+
+            if (!videoIdMatch) {
+                alert('Prosím, vlož platnou URL YouTube videa.');
+                return;
+            }
+
+            const videoId = videoIdMatch[1];
+
+            // Pokud přehrávač už existuje, jen ho změníme
+            if (player) {
+                player.loadVideoById(videoId);
+            } else {
+                // Jinak vytvoříme nový přehrávač
+                player = new YT.Player('youtube-player', {
+                    height: '100%',
+                    width: '100%',
+                    videoId: videoId,
+                    playerVars: {
+                        'controls': 1, // Zobrazí ovládací prvky
+                        'playsinline': 1 // Přehrávání v okně
+                    },
+                    events: {
+                        'onReady': onPlayerReady,
+                        'onStateChange': onPlayerStateChange
+                    }
+                });
+            }
+        }
+
+        // 4. Funkce volaná po načtení přehrávače
+        function onPlayerReady(event) {
+            console.log('YouTube přehrávač je připraven.');
+            // event.target.playVideo(); // Můžeš hned spustit
+        }
+
+        // 5. Zde by se implementovala synchronizace (klíčová část)
+        function onPlayerStateChange(event) {
+            // Kódy stavu:
+            // -1: Nepřehráno
+            // 0: Skončeno
+            // 1: Přehrávání
+            // 2: Pozastaveno
+            // 3: Ukládání (Buffering)
+            // 5: Cueled (Připraveno ke spuštění)
+
+            const currentState = event.data;
+            const currentTime = player.getCurrentTime();
+
+            console.log(`Stav se změnil na: ${currentState}, čas: ${currentTime.toFixed(2)}s`);
+
+            // ***********************************************
+            // *** TOTO JE MÍSTO PRO WEBSOCKET IMPLEMENTACI ***
+            // ***********************************************
+            // Zde by tvůj kód poslal zprávu s novým stavem a časem (currentState, currentTime)
+            // na server (přes WebSocket), aby ji poslal dál všem ostatním uživatelům.
+
+            /* Příklad, jak by to vypadalo s fiktivní funkcí pro odeslání:
+            if (currentState === 1) { // Přehrávání
+                sendWebSocketMessage({ action: 'play', time: currentTime });
+            } else if (currentState === 2) { // Pozastaveno
+                sendWebSocketMessage({ action: 'pause', time: currentTime });
+            }
+            */
+        }
+    </script>
+</body>
+</html>
