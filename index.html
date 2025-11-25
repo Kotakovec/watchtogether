@@ -29,7 +29,7 @@
 <div id="main">
   <input id="videoUrl" type="text" placeholder="Vlož ID videa (např. mzrdbF-TwFo)">
   <button id="loadVideo">Načíst Video</button>
-  <iframe id="player" allow="autoplay"></iframe>
+  <div id="player"></div>
 </div>
 
 <script>
@@ -49,9 +49,18 @@ const db = firebase.database();
 let roomCode = null;
 let username = null;
 let player;
+let readyToLoadVideo = false;
+let pendingVideoID = null;
 
 function onYouTubeIframeAPIReady() {
-  player = new YT.Player("player", { events: { onStateChange: syncState } });
+  player = new YT.Player("player", {
+    height: '400',
+    width: '100%',
+    events: { onStateChange: syncState, onReady: () => {
+      readyToLoadVideo = true;
+      if(pendingVideoID) loadVideoByID(pendingVideoID);
+    }}
+  });
 }
 
 let lastUpdate = 0;
@@ -105,10 +114,17 @@ function listenRoom() {
   db.ref(`rooms/${roomCode}/state`).on("value", s => {
     const st = s.val(); if (!st) return;
     if (st.currentVideo) {
-      if (Math.abs(player.getCurrentTime() - st.time) > 1) player.seekTo(st.time, true);
-      if (st.playing) player.playVideo(); else player.pauseVideo();
+      if (readyToLoadVideo) loadVideoByID(st.currentVideo);
     }
+    if (st.playing) player.playVideo(); else player.pauseVideo();
+    if (Math.abs(player.getCurrentTime() - st.time) > 1) player.seekTo(st.time, true);
   });
+}
+
+function loadVideoByID(id) {
+  if (!readyToLoadVideo) { pendingVideoID = id; return; }
+  player.loadVideoById(id);
+  pendingVideoID = null;
 }
 
 document.getElementById("loadVideo").onclick = () => {
