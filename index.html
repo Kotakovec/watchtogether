@@ -8,28 +8,28 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 <script src="https://www.youtube.com/iframe_api"></script>
 <style>
-  body { margin: 0; font-family: Arial; background: #0d0d0d; color: white; display: flex; height: 100vh; }
-  #sidebar { width: 250px; min-width: 150px; max-width: 400px; background: #111; border-right: 2px solid #222; padding: 10px; box-sizing: border-box; overflow-y: auto; resize: horizontal; }
-  #sidebar h2 { margin-top: 10px; margin-bottom: 5px; }
-  #sidebar ul { padding-left: 0; list-style: none; }
-  #sidebar ul li { margin-bottom: 5px; padding: 5px; background: rgba(255,255,255,0.05); border-radius: 4px; }
-  #main { flex: 1; display: flex; flex-direction: column; padding: 10px; box-sizing: border-box; }
-  #videoUrl { padding: 8px; margin-bottom: 10px; border-radius: 5px; border: 1px solid #444; background: #222; color: white; width: 100%; box-sizing: border-box; }
-  #loadVideo { padding: 8px 12px; margin-bottom: 10px; border: none; border-radius: 5px; background: #28a745; color: white; cursor: pointer; }
-  #player { flex: 1; width: 100%; border: none; border-radius: 8px; min-height: 400px; }
+body { margin:0; font-family: Arial; background:#0d0d0d; color:white; display:flex; height:100vh;}
+#sidebar {width:250px; min-width:150px; max-width:400px; background:#111; border-right:2px solid #222; padding:10px; box-sizing:border-box; overflow-y:auto; resize:horizontal;}
+#sidebar h2{margin-top:10px;margin-bottom:5px;}
+#sidebar ul{padding-left:0; list-style:none;}
+#sidebar ul li{margin-bottom:5px; padding:5px; background: rgba(255,255,255,0.05); border-radius:4px;}
+#main{flex:1; display:flex; flex-direction:column; padding:10px; box-sizing:border-box;}
+#videoUrl{padding:8px;margin-bottom:10px;border-radius:5px;border:1px solid #444;background:#222;color:white;width:100%;box-sizing:border-box;}
+#loadVideo{padding:8px 12px;margin-bottom:10px;border:none;border-radius:5px;background:#28a745;color:white;cursor:pointer;}
+#player{flex:1;width:100%;border:none;border-radius:8px;min-height:400px;}
 </style>
 </head>
 <body>
 
 <div id="sidebar">
-  <h2>Lidi</h2>
-  <ul id="usersList"></ul>
+<h2>Lidi</h2>
+<ul id="usersList"></ul>
 </div>
 
 <div id="main">
-  <input id="videoUrl" type="text" placeholder="Vlož YouTube odkaz nebo ID videa">
-  <button id="loadVideo">Načíst Video</button>
-  <div id="player"></div>
+<input id="videoUrl" type="text" placeholder="Vlož YouTube odkaz nebo ID videa">
+<button id="loadVideo">Načíst Video</button>
+<div id="player"></div>
 </div>
 
 <script>
@@ -49,110 +49,85 @@ const db = firebase.database();
 let roomCode = null;
 let username = null;
 let player;
-let readyToLoadVideo = false;
-let pendingVideoID = null;
+let ready=false;
+let pendingVideo=null;
 
-function onYouTubeIframeAPIReady() {
-  player = new YT.Player("player", {
-    height: '400',
-    width: '100%',
-    events: { 
-      onStateChange: syncState,
-      onReady: () => {
-        readyToLoadVideo = true;
-        if(pendingVideoID) loadVideoByID(pendingVideoID);
-      }
-    }
-  });
+function onYouTubeIframeAPIReady(){
+  player = new YT.Player("player",{height:'400',width:'100%',events:{onStateChange:syncState,onReady:()=>{ready=true;if(pendingVideo) loadVideo(pendingVideo);}}});
 }
 
-let lastUpdate = 0;
-function syncState(event) {
-  if (!roomCode) return;
-  const now = Date.now();
-  if (now - lastUpdate < 500) return;
-  lastUpdate = now;
+let lastUpdate=0;
+function syncState(event){
+  if(!roomCode) return;
+  const now=Date.now();
+  if(now-lastUpdate<500) return;
+  lastUpdate=now;
 
-  if (event.data === YT.PlayerState.PLAYING) {
-    db.ref(`rooms/${roomCode}/state`).update({ playing: true, time: player.getCurrentTime() });
-  }
-  if (event.data === YT.PlayerState.PAUSED) {
-    db.ref(`rooms/${roomCode}/state`).update({ playing: false, time: player.getCurrentTime() });
-  }
+  if(event.data===YT.PlayerState.PLAYING) db.ref(`rooms/${roomCode}/state`).update({playing:true,time:player.getCurrentTime()});
+  if(event.data===YT.PlayerState.PAUSED) db.ref(`rooms/${roomCode}/state`).update({playing:false,time:player.getCurrentTime()});
 }
 
-function joinRoomPrompt() {
-  roomCode = prompt("Zadej 6místný kód místnosti:");
-  if (!roomCode || !/^[0-9]{6}$/.test(roomCode)) {
-    alert("Kód musí být 6 číslic!");
-    return joinRoomPrompt();
-  }
-
-  db.ref(`rooms/${roomCode}`).get().then(snapshot => {
-    if (!snapshot.exists()) {
-      const create = confirm("Místnost neexistuje. Chceš ji vytvořit?");
-      if (!create) return joinRoomPrompt();
-      username = prompt("Zadej svoje jméno:");
-      db.ref(`rooms/${roomCode}`).set({
-        users: { [Date.now()]: username },
-        state: { playing: false, time: 0, currentVideo: null }
-      });
+function joinRoomPrompt(){
+  roomCode=prompt("Zadej 6místný kód místnosti:");
+  if(!roomCode||!/^[0-9]{6}$/.test(roomCode)){alert("Kód musí být 6 číslic!"); return joinRoomPrompt();}
+  db.ref(`rooms/${roomCode}`).get().then(snap=>{
+    if(!snap.exists()){
+      const create=confirm("Místnost neexistuje. Chceš ji vytvořit?");
+      if(!create) return joinRoomPrompt();
+      username=prompt("Zadej svoje jméno:");
+      db.ref(`rooms/${roomCode}`).set({users:{[Date.now()]:username},state:{playing:false,time:0,currentVideo:null}});
       listenRoom();
       alert(`Místnost vytvořena! Tvůj kód: ${roomCode}`);
     } else {
-      username = prompt("Zadej svoje jméno:");
+      username=prompt("Zadej svoje jméno:");
       db.ref(`rooms/${roomCode}/users`).push(username);
       listenRoom();
     }
   });
 }
 
-function listenRoom() {
-  db.ref(`rooms/${roomCode}/users`).on("value", snap => {
-    const list = document.getElementById("usersList");
-    list.innerHTML = "";
-    snap.forEach(u => { const li = document.createElement("li"); li.textContent = u.val(); list.appendChild(li); });
+function listenRoom(){
+  db.ref(`rooms/${roomCode}/users`).on("value",snap=>{
+    const list=document.getElementById("usersList");
+    list.innerHTML="";
+    snap.forEach(u=>{const li=document.createElement("li"); li.textContent=u.val(); list.appendChild(li);});
   });
 
-  db.ref(`rooms/${roomCode}/state`).on("value", s => {
-    const st = s.val(); if (!st) return;
-    if (st.currentVideo) {
-      if (readyToLoadVideo) loadVideoByID(st.currentVideo);
-      else pendingVideoID = st.currentVideo;
+  db.ref(`rooms/${roomCode}/state`).on("value",s=>{
+    const st=s.val(); if(!st) return;
+    if(st.currentVideo){
+      if(ready) loadVideo(st.currentVideo); else pendingVideo=st.currentVideo;
     }
-    if (st.playing) player.playVideo(); else player.pauseVideo();
-    if (Math.abs(player.getCurrentTime() - st.time) > 1) player.seekTo(st.time, true);
+    if(st.playing) player.playVideo(); else player.pauseVideo();
+    if(Math.abs(player.getCurrentTime()-st.time)>1) player.seekTo(st.time,true);
   });
 }
 
-function extractVideoID(url) {
-  url = url.trim();
-  // klasický parametr v=
-  let match = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
-  if (match) return match[1];
-  // krátký youtu.be odkaz
-  match = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
-  if (match) return match[1];
-  // samotné ID
-  if (/^[a-zA-Z0-9_-]{11}$/.test(url)) return url;
+function extractID(url){
+  url=url.trim();
+  let match=url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+  if(match) return match[1];
+  match=url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+  if(match) return match[1];
+  if(/^[a-zA-Z0-9_-]{11}$/.test(url)) return url;
   return null;
 }
 
-function loadVideoByID(id) {
-  if (!readyToLoadVideo) { pendingVideoID = id; return; }
-  if (!id || id.length !== 11) { alert("Nelze načíst video – zkontroluj odkaz nebo ID."); return; }
+function loadVideo(id){
+  if(!ready){pendingVideo=id; return;}
+  if(!id || id.length!==11){alert("Neplatné video. Vlož prosím platný YouTube odkaz."); return;}
   player.loadVideoById(id);
-  pendingVideoID = null;
+  pendingVideo=null;
 }
 
-document.getElementById("loadVideo").onclick = () => {
-  const input = document.getElementById("videoUrl").value;
-  const id = extractVideoID(input);
-  if (!id) return alert("Nelze rozpoznat ID videa – zadej správný odkaz nebo ID.");
-  db.ref(`rooms/${roomCode}/state`).update({ currentVideo: id, playing: true, time: 0 });
+document.getElementById("loadVideo").onclick=()=>{
+  const input=document.getElementById("videoUrl").value;
+  const id=extractID(input);
+  if(!id) return alert("Nelze rozpoznat video. Použij klasické YouTube video.");
+  db.ref(`rooms/${roomCode}/state`).update({currentVideo:id,playing:true,time:0});
 };
 
-window.onload = joinRoomPrompt;
+window.onload=joinRoomPrompt;
 </script>
 </body>
 </html>
