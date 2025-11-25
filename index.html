@@ -27,8 +27,8 @@
 </div>
 
 <div id="main">
-  <input id="videoUrl" type="text" placeholder="Vlož YouTube URL...">
-  <button id="loadVideo">Načíst Video</button>
+  <input id="videoUrl" type="text" placeholder="Vlož YouTube video nebo playlist URL...">
+  <button id="loadVideo">Načíst Video / Playlist</button>
   <iframe id="player" src="" allow="autoplay"></iframe>
 </div>
 
@@ -83,7 +83,7 @@ function joinRoomPrompt() {
       username = prompt("Zadej svoje jméno:");
       db.ref(`rooms/${roomCode}`).set({
         users: { [Date.now()]: username },
-        state: { playing: false, time: 0 }
+        state: { playing: false, time: 0, currentVideo: null, playlist: [] }
       });
       listenRoom();
       alert(`Místnost vytvořena! Tvůj kód: ${roomCode}`);
@@ -104,34 +104,41 @@ function listenRoom() {
 
   db.ref(`rooms/${roomCode}/state`).on("value", s => {
     const st = s.val(); if (!st) return;
-    if (Math.abs(player.getCurrentTime() - st.time) > 1) player.seekTo(st.time, true);
-    if (st.playing) player.playVideo(); else player.pauseVideo();
+
+    // Synchronizace videa nebo playlistu
+    if (st.currentVideo) {
+      if (Math.abs(player.getCurrentTime() - st.time) > 1) player.seekTo(st.time, true);
+      if (st.playing) player.playVideo(); else player.pauseVideo();
+    }
+    // Pokud je playlist
+    if (st.playlist && st.playlist.length > 0) {
+      player.loadPlaylist({ list: st.playlist, listType: 'playlist', index: 0 });
+    }
   });
 }
 
-function getYouTubeID(url) {
+function getYouTubeIDorPlaylist(url) {
   url = url.trim();
-
-  // parametr v= kdekoliv v URL
   const vMatch = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
-  if (vMatch) return vMatch[1];
-
-  // short link youtu.be/VIDEO_ID
+  if (vMatch) return { type: 'video', id: vMatch[1] };
+  const listMatch = url.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+  if (listMatch) return { type: 'playlist', id: listMatch[1] };
   const shortMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
-  if (shortMatch) return shortMatch[1];
-
-  // embed URL youtube.com/embed/VIDEO_ID
-  const embedMatch = url.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/);
-  if (embedMatch) return embedMatch[1];
-
+  if (shortMatch) return { type: 'video', id: shortMatch[1] };
   return null;
 }
 
 document.getElementById("loadVideo").onclick = () => {
   const url = document.getElementById("videoUrl").value;
-  const id = getYouTubeID(url);
-  if (!id) return alert("URL není validní. Ujisti se, že je YouTube odkaz.");
-  player.loadVideoById(id);
+  const res = getYouTubeIDorPlaylist(url);
+  if (!res) return alert("URL není validní.");
+  
+  if (res.type === 'video') {
+    db.ref(`rooms/${roomCode}/state`).update({ currentVideo: res.id, playlist: [], playing: true, time: 0 });
+  }
+  if (res.type === 'playlist') {
+    db.ref(`rooms/${roomCode}/state`).update({ currentVideo: null, playlist: [res.id], playing: true, time: 0 });
+  }
 };
 
 window.onload = joinRoomPrompt;
