@@ -105,10 +105,15 @@ function listenRoom(){
 
 function extractID(url){
   url=url.trim();
-  let match=url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+  // odstranit parametry za ID
+  if(url.includes("?")) url = url.split("?")[0];
+  // klasický parametr v=
+  let match = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
   if(match) return match[1];
-  match=url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+  // krátký youtu.be odkaz
+  match = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
   if(match) return match[1];
+  // samotné ID
   if(/^[a-zA-Z0-9_-]{11}$/.test(url)) return url;
   return null;
 }
@@ -123,7 +128,7 @@ function loadVideo(id){
 document.getElementById("loadVideo").onclick=()=>{
   const input=document.getElementById("videoUrl").value;
   const id=extractID(input);
-  if(!id) return alert("Nelze rozpoznat video. Použij klasické YouTube video.");
+  if(!id) return alert("Nelze rozpoznat video. Použij klasické YouTube video nebo ID.");
   db.ref(`rooms/${roomCode}/state`).update({currentVideo:id,playing:true,time:0});
 };
 
