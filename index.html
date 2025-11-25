@@ -50,7 +50,6 @@ let roomCode = null;
 let username = null;
 let player;
 
-// YouTube API
 function onYouTubeIframeAPIReady() {
   player = new YT.Player("player", { events: { onStateChange: syncState } });
 }
@@ -70,7 +69,6 @@ function syncState(event) {
   }
 }
 
-// Prompt pro vstup
 function joinRoomPrompt() {
   roomCode = prompt("Zadej 6místný kód místnosti:");
   if (!roomCode || !/^[0-9]{6}$/.test(roomCode)) {
@@ -111,7 +109,12 @@ function listenRoom() {
   });
 }
 
-// Video loader
+function getYouTubeID(url) {
+  const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+  const match = url.match(regex);
+  return match ? match[1] : null;
+}
+
 document.getElementById("loadVideo").onclick = () => {
   const url = document.getElementById("videoUrl").value.trim();
   const id = getYouTubeID(url);
@@ -119,8 +122,6 @@ document.getElementById("loadVideo").onclick = () => {
   player.loadVideoById(id);
 };
 
-
-// Spustíme prompt hned po načtení stránky
 window.onload = joinRoomPrompt;
 </script>
 </body>
