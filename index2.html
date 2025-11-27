@@ -25,10 +25,7 @@ body {
   display:flex;
   flex-direction:column;
 }
-#main {
-  flex:1;
-  padding:10px;
-}
+#main { flex:1; padding:10px; }
 button,input {
   width:100%;
   padding:8px;
@@ -39,30 +36,18 @@ button,input {
 button {
   background:#2563eb;
   color:white;
-  cursor:pointer;
 }
 button.red { background:#b91c1c; }
-input {
-  background:#222;
-  color:white;
-}
-#players {
-  margin-top:10px;
-  flex:1;
-  overflow:auto;
-}
-#player {
-  width:100%;
-  height:100%;
-  background:black;
-}
+input { background:#222; color:white; }
 .hidden { display:none; }
+#users { flex:1; overflow:auto; margin-top:8px; }
+#player { width:100%; height:100%; background:black; }
 .code {
   background:#222;
   padding:6px;
-  text-align:center;
   font-weight:bold;
-  margin:6px 0;
+  text-align:center;
+  margin-bottom:6px;
 }
 </style>
 </head>
@@ -78,16 +63,16 @@ input {
 
   <div id="connected" class="hidden">
     <button class="red" onclick="disconnect()">Odpojit se</button>
-    <div class="code" id="roomCode"></div>
+    <div id="roomCode" class="code"></div>
   </div>
-
-  <ul id="players"></ul>
 
   <div id="videoControls" class="hidden">
     <input id="videoInput" placeholder="YouTube odkaz nebo ID">
     <button onclick="loadVideo()">Načíst video</button>
   </div>
 
+  <div>Lidi:</div>
+  <ul id="users"></ul>
 </div>
 
 <div id="main">
@@ -95,92 +80,87 @@ input {
 </div>
 
 <script>
-// ================= FIREBASE =================
+// =============== FIREBASE ===============
 firebase.initializeApp({
   apiKey: "AIzaSyBn6sJX5f9MIIXUSBWJDEc2zsDkr5Z7O0o",
   authDomain: "watchtogether-e67a5.firebaseapp.com",
   databaseURL: "https://watchtogether-e67a5-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "watchtogether-e67a5"
 });
-
 const db = firebase.database();
 
-// ================= STATE =================
+// =============== STATE ===============
 let room = localStorage.getItem("room");
 let name = localStorage.getItem("name");
 let userRef = null;
 let player;
 let ignore = false;
 
-// ================= YT =================
-function onYouTubeIframeAPIReady() {
-  player = new YT.Player("player", {
-    events:{ onStateChange:onState }
-  });
+// =============== YT ===============
+function onYouTubeIframeAPIReady(){
+  player = new YT.Player("player",{ events:{onStateChange:onState}});
 }
 
-function getID(text){
+function extractID(text){
   const m = text.match(/(?:v=|\/)([0-9A-Za-z_-]{11})/);
-  return m ? m[1] : text.length === 11 ? text : null;
+  return m ? m[1] : text.length===11 ? text : null;
 }
 
-// ================= UI =================
-function showConnected(){
+// =============== UI ===============
+function connectedUI(){
   auth.classList.add("hidden");
   connected.classList.remove("hidden");
   videoControls.classList.remove("hidden");
-  roomCode.textContent = "Kód: "+room;
+  roomCode.textContent = "KÓD: " + room;
 }
-
-function showDisconnected(){
+function disconnectedUI(){
   auth.classList.remove("hidden");
   connected.classList.add("hidden");
   videoControls.classList.add("hidden");
-  players.innerHTML="";
+  users.innerHTML="";
 }
 
-// ================= ROOM =================
+// =============== ROOMS ===============
 function createRoom(){
-  name = prompt("Jméno:");
-  if(!name) return;
+  const r = prompt("Zvol 6místný kód (čísla)");
+  if(!/^\d{6}$/.test(r)) return alert("Musí to být 6 číslic");
+  const n = prompt("Tvoje jméno");
+  if(!n) return;
 
-  room = Math.floor(100000+Math.random()*900000).toString();
+  db.ref("rooms/"+r).get().then(s=>{
+    if(s.exists()) return alert("Místnost už existuje");
 
-  db.ref("rooms/"+room).set({
-    state:{playing:false,time:0},
-    users:{}
+    db.ref("rooms/"+r).set({
+      state:{playing:false,time:0},
+      users:{}
+    });
+
+    room=r; name=n;
+    save(); joinInternal();
   });
-
-  save();
-  joinInternal();
-  alert("Kód místnosti: "+room);
 }
 
 function joinRoom(){
-  room = prompt("Kód místnosti:");
-  if(!room) return;
-  name = prompt("Jméno:");
-  if(!name) return;
+  const r = prompt("Zadej kód");
+  const n = prompt("Tvoje jméno");
+  if(!r || !n) return;
 
-  db.ref("rooms/"+room).get().then(s=>{
+  db.ref("rooms/"+r).get().then(s=>{
     if(!s.exists()) return alert("Místnost neexistuje");
-    save();
-    joinInternal();
+    room=r; name=n;
+    save(); joinInternal();
   });
 }
 
 function joinInternal(){
   userRef = db.ref("rooms/"+room+"/users").push(name);
-  showConnected();
+  connectedUI();
   listen();
-
-  window.addEventListener("beforeunload",()=>{
-    if(userRef) userRef.onDisconnect().remove();
-  });
+  window.addEventListener("beforeunload",()=>userRef.onDisconnect().remove());
 }
 
 function disconnect(){
-  if(userRef) userRef.remove();
+  userRef.remove();
   localStorage.clear();
   location.reload();
 }
@@ -190,33 +170,31 @@ function save(){
   localStorage.setItem("name",name);
 }
 
-// ================= LISTEN =================
+// =============== LISTEN ===============
 function listen(){
   db.ref("rooms/"+room+"/users").on("value",s=>{
-    players.innerHTML="";
-    s.forEach(c=>{
+    users.innerHTML="";
+    s.forEach(u=>{
       const li=document.createElement("li");
-      li.textContent=c.val();
-      players.appendChild(li);
+      li.textContent=u.val();
+      users.appendChild(li);
     });
   });
 
   db.ref("rooms/"+room+"/state").on("value",s=>{
     const st=s.val();
-    if(!st || !player) return;
-
+    if(!player || !st) return;
     ignore=true;
     if(Math.abs(player.getCurrentTime()-st.time)>1)
       player.seekTo(st.time,true);
-
     st.playing ? player.playVideo() : player.pauseVideo();
     setTimeout(()=>ignore=false,300);
   });
 }
 
-// ================= VIDEO =================
+// =============== VIDEO ===============
 function loadVideo(){
-  const id = getID(videoInput.value);
+  const id = extractID(videoInput.value);
   if(!id) return alert("Neplatný odkaz");
   player.loadVideoById(id);
   db.ref("rooms/"+room+"/state").set({playing:true,time:0});
@@ -224,7 +202,7 @@ function loadVideo(){
 
 function onState(e){
   if(ignore || !room) return;
-  if(e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.PAUSED){
+  if(e.data===1 || e.data===2){
     db.ref("rooms/"+room+"/state").set({
       playing:e.data===1,
       time:player.getCurrentTime()
@@ -232,7 +210,7 @@ function onState(e){
   }
 }
 
-// ================= AUTO REJOIN =================
+// =============== AUTO REJOIN ===============
 if(room && name){
   db.ref("rooms/"+room).get().then(s=>{
     if(s.exists()) joinInternal();
