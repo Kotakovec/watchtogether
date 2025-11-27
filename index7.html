@@ -35,7 +35,7 @@ body {
   flex-direction:column;
   /* Červený rámeček */
   border: 4px solid red; 
-  height: 100%; /* OPRAVA PRO ZOBRAZENÍ PLAYERU */
+  height: 100%; 
   min-height: 0;
 }
 button,input {
@@ -169,7 +169,7 @@ let player;
 let isApplyingState = false; 
 let lastVideoID = null; 
 let pendingState = null;
-let isHost = false; // NOVÁ: Určuje, zda jsi host (první v místnosti)
+let isHost = false; // Určuje, zda je uživatel host (ten, kdo založil místnost/je první)
 
 window.onload = function() {
   name = localStorage.getItem("name");
@@ -194,11 +194,9 @@ function submitName() {
     
     name = tempName;
 
-    // 1. Zkontrolujeme duplicity před připojením
     db.ref(`rooms/${room}/users`).once('value').then(snapshot => {
         let nameExists = false;
         snapshot.forEach(user => {
-            // Kontrolujeme, zda hodnota (jméno) odpovídá
             if (user.val() === name) {
                 nameExists = true;
             }
@@ -207,7 +205,6 @@ function submitName() {
         if (nameExists) {
             alert(`Jméno '${name}' už je v místnosti! Zkus prosím jiné.`);
         } else {
-            // 2. Jméno je OK, uložíme a připojíme se
             if (rememberCheckbox.checked) {
                 localStorage.setItem("name", name);
             } else {
@@ -242,37 +239,33 @@ function extractVideoID(url){
   return m ? m[1] : null;
 }
 
-// ================= OVLÁDÁNÍ A SETUP =================
+// ================= OVLÁDÁNÍ A SETUP (OPRAVA HOST-ONLY EDITACE) =================
 
-// NOVÁ: Nastavení přepínače ovládání a posluchače
 function setupControls() {
     const controlSwitch = document.getElementById('allowControl');
     const roomControlRef = db.ref(`rooms/${room}/controlsEnabled`);
     const urlInput = document.getElementById('videoUrl');
     const loadBtn = document.getElementById('loadVideoBtn');
 
-    // Host nastavuje počáteční hodnotu
+    // Host privilege: POUZE host může měnit přepínač
     if (isHost) {
-        // Povolí hostovi měnit přepínač a nastaví listener na změnu
-        roomControlRef.once('value').then(snap => {
-            const enabled = snap.val() === true;
-            controlSwitch.checked = enabled;
-        });
-
+        controlSwitch.disabled = false;
+        // Host nastavuje stav v DB při změně
         controlSwitch.addEventListener('change', () => {
             roomControlRef.set(controlSwitch.checked);
         });
     } else {
-        // Ostatní uživatelé nemohou měnit přepínač
+        // Ne-host má přepínač zakázaný
         controlSwitch.disabled = true;
     }
     
-    // Všichni poslouchají stav ovládání
+    // Všichni poslouchají aktuální stav ovládání
     roomControlRef.on('value', snap => {
         const enabled = snap.val() === true;
         
+        // Aktualizuje stav přepínače pro ne-hosty (protože je mají disabled)
         if (!isHost) {
-            controlSwitch.checked = enabled; // Aktualizuje stav přepínače pro ostatní
+            controlSwitch.checked = enabled; 
         }
         
         // Host (isHost=true) má VŽDY ovládání, ostatní jen pokud je povoleno (enabled=true)
@@ -289,18 +282,18 @@ function joinInternal(){
   
   db.ref("rooms/"+room).get().then(s=>{
     if(!s.exists()){
-      // První uživatel v místnosti je Host a inicializuje DB
+      // První uživatel v místnosti je Host
       isHost = true;
       db.ref("rooms/"+room).set({
         users:{ [userRef.key]: name },
         state:{playing:false, time:0, ts:Date.now(), videoID: "dQw4w9WgXcQ"},
-          controlsEnabled: false // NOVÁ: Výchozí stav: zakázáno
+          controlsEnabled: false 
       });
     } else {
-      isHost = false; // Je uživatel, ale ne host
+      isHost = false; 
     }
     
-    setupControls(); // Nastaví přepínač a ovládací prvky
+    setupControls(); // Nastaví přepínač
   });
   
   listenRoom();
@@ -310,7 +303,7 @@ window.addEventListener("beforeunload", () => {
   if(userRef) userRef.remove();
 });
 
-// ================= LISTEN & APPLY (Synchronizace) =================
+// ================= LISTEN & APPLY (Synchronizace - LOGIKA JE PŮVODNÍ, NESAHALO SE) =================
 
 function applyState(data) {
   if(!data || !player || !player.getCurrentTime) return;
@@ -381,13 +374,14 @@ function listenRoom(){
   });
 }
 
-// ================= VIDEO CONTROLS & ODESÍLÁNÍ =================
+// ================= VIDEO CONTROLS & ODESÍLÁNÍ (NOVÁ KONTROLA HOST+OVLÁDÁNÍ) =================
+
 function loadVideo(){
   const id = extractVideoID(videoUrl.value);
   if(!id) return alert("Neplatný YouTube odkaz");
 
-  // Kontrola povolení ovládání (pokud nejsi host A není povoleno, nepovolíme)
   const controlsEnabled = document.getElementById('allowControl').checked;
+  // Zápis do DB povolen pouze Hostovi NEBO pokud je Ovládání povoleno
   if (!isHost && !controlsEnabled) {
       alert("Pouze host nebo povolený uživatelé mohou vkládat videa.");
       return;
@@ -405,8 +399,8 @@ function loadVideo(){
 function onPlayerState(e){
   if(isApplyingState || !room || !userRef || e.data === YT.PlayerState.CUED || e.data === YT.PlayerState.ENDED) return; 
   
-  // Kontrola povolení ovládání (pro Play/Pause)
   const controlsEnabled = document.getElementById('allowControl').checked;
+  // Zápis do DB povolen pouze Hostovi NEBO pokud je Ovládání povoleno
   if (!isHost && !controlsEnabled) {
       return;
   }
