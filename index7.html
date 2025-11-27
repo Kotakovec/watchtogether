@@ -26,8 +26,10 @@ body {
   width:260px;
   background:#111;
   display:flex;
-  flex-direction:column; /* ZAJIŠŤUJE, ŽE OVLÁDACÍ PRVKY JSOU NAD SEZNAMEM */
+  flex-direction:column;
   padding:10px;
+    position: relative;
+    z-index: 10; 
 }
 #main {
   flex:1;
@@ -44,21 +46,35 @@ button,input {
   border:none;
   border-radius:4px;
 }
-button {
-  background:#ffc107; 
-  color:#333;
-  font-weight: bold;
-  cursor:pointer;
+/* Nové styly pro tlačítka vlevo nahoře */
+.control-button {
+    background:#337ab7; /* Modrá barva */
+    color:white;
+    font-weight: bold;
+    cursor:pointer;
+    width: 100px; /* Pevná šířka jako na obrázku */
+    margin: 5px 0;
+    padding: 8px 12px;
+    text-align: left; /* Text zarovnaný vlevo */
 }
-button:hover { opacity:0.9; }
+.control-button.yellow {
+    background: #ffc107; /* Žlutá pro "PLAY" */
+    color: #333;
+}
+.control-button:hover { opacity:0.9; }
+
 input {
   background:#222;
   color:white;
 }
+#users-container {
+    margin-top: auto; /* Posune seznam uživatelů úplně dolů */
+    padding-top: 10px;
+    border-top: 1px solid #333;
+}
 #users {
   margin-top:6px;
   overflow:auto;
-  flex:1; /* KLÍČOVÉ: Aby seznam zabral zbytek místa */
   padding: 0;
   list-style: none;
 }
@@ -113,12 +129,15 @@ input {
 
 <div id="sidebar">
 
-  <div id="controlPanel" style="padding-bottom: 20px;">
+  <div id="topControls" style="padding-bottom: 20px;">
     
-    <div id="videoControls" style="margin-bottom: 5px;">
-      <div class="small">Vložit YouTube odkaz:</div>
-      <input id="videoUrl" placeholder="YouTube odkaz">
-      <button id="loadVideoBtn" onclick="loadVideo()">Načíst video</button>
+    <button class="control-button">🔊 MIC ON</button>
+    <button class="control-button">🎧 HEAR ON</button>
+
+    <div id="videoControls" style="margin-top: 20px; margin-bottom: 5px;">
+        <div class="small">Vložit YouTube odkaz:</div>
+        <input id="videoUrl" placeholder="YouTube odkaz" autocomplete="off">
+        <button id="loadVideoBtn" class="control-button yellow" onclick="loadVideo()" style="width: 100%;"> ▶️ PLAY</button>
     </div>
     
     <div style="margin-top: 10px; font-size: 14px; display: flex; align-items: center;">
@@ -128,9 +147,11 @@ input {
     
   </div>
     
-    <div class="small" style="margin-top: 10px;">Připojení lidé:</div>
-  <ul id="users">
-      </ul>
+  <div id="users-container">
+    <div class="small">Připojení lidé:</div>
+    <ul id="users">
+      </ul>
+  </div>
 
 </div>
 
@@ -141,7 +162,7 @@ input {
 <div id="nameDialog" class="dialog-overlay hidden">
     <div class="dialog-box">
         <h2>Ahoj!</h2>
-        <input type="text" id="inputName" placeholder="Zadej prosím své jméno">
+        <input type="text" id="inputName" placeholder="Zadej prosím své jméno" autocomplete="off">
         <label>
             <input type="checkbox" id="rememberName"> Zapamatovat jméno
         </label>
@@ -176,7 +197,6 @@ let pendingState = null;
 let isHost = false; 
 
 window.onload = function() {
-    // KLÍČOVÁ ZMĚNA: Před připojením vyčistíme LocalStorage, pokud tam je "Anonymní divák"
     if (localStorage.getItem("name") === "Anonymní divák") {
         localStorage.removeItem("name");
     }
@@ -190,14 +210,12 @@ window.onload = function() {
     }
 };
 
-// Funkce pro odeslání jména z dialogu (VYNUCENÉ ZADÁNÍ JMÉNA)
 function submitName() {
     const inputField = document.getElementById('inputName');
     const rememberCheckbox = document.getElementById('rememberName');
     
     let tempName = inputField.value.trim();
     
-    // VYNUCENÍ ZADÁNÍ JMÉNA
     if (tempName === "") {
         alert("Prosím zadej své jméno, nemůže být prázdné.");
         return;
