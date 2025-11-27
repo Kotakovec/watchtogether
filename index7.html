@@ -12,41 +12,38 @@
 <style>
 /* CSS STYLY */
 html, body {
-  height: 100%; /* DŮLEŽITÉ PRO ZAJIŠTĚNÍ VÝŠKY */
+  height: 100%;
   margin: 0;
 }
 body {
-  background:#0d0d0d;
-  color:white;
-  font-family:Arial;
-  display:flex;
+  background:#0d0d0d;
+  color:white;
+  font-family:Arial;
+  display:flex;
 }
 #sidebar {
-  width:260px;
-  background:#111;
-  display:flex;
-  flex-direction:column;
-  padding:10px;
-    /* OPRAVA PŘEKRÝVÁNÍ: Musí být výše než přehrávač */
-    position: relative;
-    z-index: 10; 
+  width:260px;
+  background:#111;
+  display:flex;
+  flex-direction:column;
+  padding:10px;
+  position: relative;
+  z-index: 10; 
 }
 #main {
-  flex:1;
-  display:flex;
-  flex-direction:column;
-  /* Červený rámeček */
-  border: 4px solid red; 
-  height: 100%; 
-  min-height: 0;
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  border: 0px solid red; 
+  height: 100%; 
+  min-height: 0;
 }
 button,input {
-  padding:8px;
-  margin:4px 0;
-  border:none;
-  border-radius:4px;
+  padding:8px;
+  margin:4px 0;
+  border:none;
+  border-radius:4px;
 }
-/* Styly pro tlačítka Mic/Hear/Play */
 .control-button {
     background:#337ab7; 
     color:white;
@@ -60,17 +57,21 @@ button,input {
 .control-button.yellow {
     background: #ffc107; 
     color: #333;
-    width: 100%; /* Plná šířka pro tlačítko Načíst */
+    width: 100%;
     text-align: center;
 }
 .control-button:hover { opacity:0.9; }
+.control-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
 
 input {
-  background:#222;
-  color:white;
+  background:#222;
+  color:white;
 }
 #videoControls input {
-    width: calc(100% - 18px); /* OPRAVENÉ ZAROVNÁNÍ */
+    width: calc(100% - 18px);
 }
 #users-container {
     margin-top: 15px; 
@@ -78,29 +79,27 @@ input {
     overflow-y: auto;
 }
 #users {
-  margin-top:6px;
-  overflow:visible; 
-  padding: 0;
-  list-style: none;
+  margin-top:6px;
+  overflow:visible; 
+  padding: 0;
+  list-style: none;
 }
 #users li {
-  padding: 4px 0;
-  border-bottom: 1px dotted #333;
+  padding: 4px 0;
+  border-bottom: 1px dotted #333;
 }
 #player {
-  flex:1;
-  background:black;
-  width: 100%;
-  height: 100%;
+  flex:1;
+  background:black;
+  width: 100%;
+  height: 100%;
 }
 .small { font-size:13px; color:#aaa; }
 
-/* TŘÍDA PRO SKRÝVÁNÍ DIALOGU */
 .hidden { 
     display: none !important; 
 } 
 
-/* Styly pro dialogové okno */
 .dialog-overlay {
     position: fixed;
     top: 0;
@@ -133,13 +132,12 @@ input {
 <body>
 
 <div id="sidebar">
-
     <button class="control-button">🔊 MIC ON</button>
     <button class="control-button">🎧 HEAR ON</button>
 
     <div id="videoControls" style="margin-top: 20px; margin-bottom: 5px;">
         <div class="small">YT Link:</div>
-        <input id="videoUrl" placeholder="Vložit odkaz" autocomplete="off">
+        <input id="videoUrl" placeholder="Vložit YouTube odkaz" autocomplete="off">
         <button id="loadVideoBtn" class="control-button yellow" onclick="loadVideo()">▶️ NAČÍST VIDEO</button>
     </div>
     
@@ -150,17 +148,15 @@ input {
 
     <div id="users-container">
         <div class="small">Připojení lidé:</div>
-        <ul id="users">
-            </ul>
+        <ul id="users"></ul>
     </div>
-
 </div>
 
 <div id="main">
-    <div id="player"></div>
+    <div id="player"></div>
 </div>
 
-<div id="nameDialog" class="dialog-overlay hidden">
+<div id="nameDialog" class="dialog-overlay">
     <div class="dialog-box">
         <h2>Ahoj!</h2>
         <input type="text" id="inputName" placeholder="Zadej prosím své jméno" autocomplete="off">
@@ -184,31 +180,45 @@ const firebaseConfig = {
   measurementId: "G-CN7C9VT3GG"
 };
 
-firebase.initializeApp(firebaseConfig);
+// Inicializace Firebase
+try {
+    firebase.initializeApp(firebaseConfig);
+} catch (error) {
+    console.log("Firebase already initialized");
+}
 const db = firebase.database();
 
 // ================= GLOBAL & SETUP =================
 const room = "room123"; 
-let name;
+let name = null;
 let userRef = null;
-let player;
+let player = null;
 let isApplyingState = false; 
 let lastVideoID = null; 
 let pendingState = null;
 let isHost = false; 
+let playerReady = false;
 
+// ================= INICIALIZACE =================
 window.onload = function() {
-    if (localStorage.getItem("name") === "Anonymní divák") {
-        localStorage.removeItem("name");
+    console.log("Page loaded");
+    
+    // Načíst jméno z localStorage
+    name = localStorage.getItem("name");
+    
+    if (name && name !== "Anonymní divák") {
+        joinInternal();
+    } else {
+        document.getElementById('nameDialog').classList.remove('hidden');
+        document.getElementById('inputName').focus();
     }
     
-    name = localStorage.getItem("name");
-
-    if (name) {
-        joinInternal();
-    } else {
-        document.getElementById('nameDialog').classList.remove('hidden');
-    }
+    // Přidat event listener pro Enter v input poli
+    document.getElementById('videoUrl').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            loadVideo();
+        }
+    });
 };
 
 function submitName() {
@@ -244,202 +254,338 @@ function submitName() {
             document.getElementById('nameDialog').classList.add('hidden');
             joinInternal();
         }
+    }).catch(error => {
+        console.error("Error checking name:", error);
+        alert("Chyba při připojování k místnosti");
     });
 }
 
 // ================= YOUTUBE API =================
 function onYouTubeIframeAPIReady() {
-  player = new YT.Player("player", {
-    width:"100%",
-    height:"100%",
-    events:{ onStateChange:onPlayerState, onReady: onPlayerReady } 
-  });
+    console.log("YouTube API ready");
+    player = new YT.Player("player", {
+        width: "100%",
+        height: "100%",
+        playerVars: {
+            'playsinline': 1,
+            'enablejsapi': 1,
+            'origin': window.location.origin
+        },
+        events: { 
+            onReady: onPlayerReady,
+            onStateChange: onPlayerState,
+            onError: onPlayerError
+        }
+    });
 }
 
-function onPlayerReady(e) {
-  db.ref(`rooms/${room}/state`).once('value').then(snap => {
-    if (snap.exists() && snap.val().videoID) {
-      applyState(snap.val());
-    }
-  });
+function onPlayerReady(event) {
+    console.log("YouTube Player Ready");
+    playerReady = true;
+    
+    // Načíst aktuální stav z Firebase
+    db.ref(`rooms/${room}/state`).once('value').then(snap => {
+        if (snap.exists()) {
+            const state = snap.val();
+            console.log("Initial state from Firebase:", state);
+            if (state && state.videoID) {
+                applyState(state);
+            }
+        }
+    }).catch(error => {
+        console.error("Error loading initial state:", error);
+    });
 }
 
-function extractVideoID(url){
-  const m = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11})/);
-  return m ? m[1] : null;
+function onPlayerError(event) {
+    console.error("YouTube Player Error:", event.data);
+    alert("Chyba při načítání videa: " + event.data);
+}
+
+function extractVideoID(url) {
+    if (!url) return null;
+    
+    // Různé formáty YouTube URL
+    const patterns = [
+        /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&?#]+)/,
+        /youtube\.com\/watch\?.*v=([^&?#]+)/,
+        /youtu\.be\/([^&?#]+)/
+    ];
+    
+    for (let pattern of patterns) {
+        const match = url.match(pattern);
+        if (match && match[1]) {
+            return match[1];
+        }
+    }
+    
+    return null;
 }
 
 // ================= OVLÁDÁNÍ A SETUP =================
-
 function setupControls() {
     const controlSwitch = document.getElementById('allowControl');
     const roomControlRef = db.ref(`rooms/${room}/controlsEnabled`);
     const urlInput = document.getElementById('videoUrl');
     const loadBtn = document.getElementById('loadVideoBtn');
 
+    // Input pole je vždy povolené pro psaní
+    urlInput.disabled = false;
+
     if (isHost) {
         controlSwitch.disabled = false;
         
+        // Načíst aktuální stav controls
         roomControlRef.once('value').then(snap => {
             const enabled = snap.val() === true;
             controlSwitch.checked = enabled;
+            updateControlStates(enabled);
         });
 
         controlSwitch.addEventListener('change', () => {
-            roomControlRef.set(controlSwitch.checked);
+            const enabled = controlSwitch.checked;
+            roomControlRef.set(enabled);
+            updateControlStates(enabled);
         });
     } else {
         controlSwitch.disabled = true;
+        
+        // Sledovat změny controlsEnabled pro ne-hosty
+        roomControlRef.on('value', snap => {
+            const enabled = snap.val() === true;
+            controlSwitch.checked = enabled;
+            updateControlStates(enabled);
+        });
     }
     
-    roomControlRef.on('value', snap => {
-        const enabled = snap.val() === true;
+    function updateControlStates(enabled) {
+        const canControl = isHost || enabled;
+        loadBtn.disabled = !canControl;
         
-        if (!isHost) {
-            controlSwitch.checked = enabled; 
+        if (loadBtn.disabled) {
+            loadBtn.title = "Nemáte oprávnění načíst video";
+        } else {
+            loadBtn.title = "Načíst video";
         }
-        
-        const isSelfControlling = isHost || enabled;
-        urlInput.disabled = !isSelfControlling;
-        loadBtn.disabled = !isSelfControlling;
+    }
+}
+
+function joinInternal() {
+    console.log("Joining room as:", name);
+    
+    userRef = db.ref(`rooms/${room}/users`).push(name);
+    userRef.onDisconnect().remove();
+    
+    db.ref("rooms/" + room).get().then(snapshot => {
+        if (!snapshot.exists()) {
+            console.log("Creating new room as host");
+            isHost = true;
+            
+            const initialState = {
+                users: { [userRef.key]: name },
+                state: {
+                    playing: false, 
+                    time: 0, 
+                    ts: Date.now(), 
+                    videoID: "dQw4w9WgXcQ" // default video
+                },
+                controlsEnabled: false 
+            };
+            
+            return db.ref("rooms/" + room).set(initialState);
+        } else {
+            console.log("Joining existing room");
+            isHost = false;
+            return Promise.resolve();
+        }
+    }).then(() => {
+        setupControls();
+        listenRoom();
+    }).catch(error => {
+        console.error("Error joining room:", error);
+        alert("Chyba při připojování k místnosti");
     });
 }
 
-
-function joinInternal(){
-  userRef = db.ref(`rooms/${room}/users`).push(name);
-  userRef.onDisconnect().remove(); 
-  
-  db.ref("rooms/"+room).get().then(s=>{
-    if(!s.exists()){
-      isHost = true;
-      db.ref("rooms/"+room).set({
-        users:{ [userRef.key]: name },
-        state:{playing:false, time:0, ts:Date.now(), videoID: "dQw4w9WgXcQ"},
-          controlsEnabled: false 
-      });
-    } else {
-      isHost = false; 
-    }
-    
-    setupControls();
-  });
-  
-  listenRoom();
-}
-
 window.addEventListener("beforeunload", () => {
-  if(userRef) userRef.remove();
+    if (userRef) {
+        userRef.remove();
+    }
 });
 
-// ================= LISTEN & APPLY (Synchronizace) =================
-
+// ================= VYLEPŠENÁ SYNCHRONIZACE =================
 function applyState(data) {
-  if(!data || !player || !player.getCurrentTime) return;
+    if (!data || !player || !playerReady) {
+        console.log("Player not ready for state application");
+        return;
+    }
 
-  isApplyingState = true;
-  const { playing, time, ts, videoID } = data;
-  const localState = player.getPlayerState();
-  const videoChanged = lastVideoID !== videoID;
-
-  // 1. Načtení/Změna Videa
-  if (videoChanged && videoID) {
-    lastVideoID = videoID;
-    pendingState = { playing, time, ts, videoID }; 
-    player.loadVideoById(videoID);
-    isApplyingState = false;
-    return;
-  }
-
-  // 2. Aplikace pending stavu po načtení
-  if (pendingState) {
-    if (localState === YT.PlayerState.PLAYING || localState === YT.PlayerState.PAUSED || localState === YT.PlayerState.BUFFERING || localState === YT.PlayerState.CUED) {
-      
-      if (pendingState.playing && localState !== YT.PlayerState.PLAYING) {
-        player.playVideo();
-      } else if (!pendingState.playing && localState !== YT.PlayerState.PAUSED) {
-        player.pauseVideo();
-      }
-      
-      player.seekTo(pendingState.time, true);
-      pendingState = null;
-    }
-  }
-
-  // 3. Synchronizace času a stavu (běžná údržba)
-  if (localState === YT.PlayerState.PLAYING || localState === YT.PlayerState.PAUSED || localState === YT.PlayerState.BUFFERING) {
-      
-      const delay = (Date.now() - ts) / 1000;
-      const syncTime = time + delay + 0.2; 
-      const timeDiff = Math.abs(player.getCurrentTime() - syncTime);
-
-      if (timeDiff > 0.5) { 
-        player.seekTo(syncTime, true);
-      }
-    
-      if (playing && localState !== YT.PlayerState.PLAYING) {
-        player.playVideo();
-      } else if (!playing && localState !== YT.PlayerState.PAUSED) {
-        player.pauseVideo();
-      }
-  }
-
-  setTimeout(() => { isApplyingState = false; }, 300); 
-}
-
-
-function listenRoom(){
-  db.ref(`rooms/${room}/users`).on("value", snap=>{
-    users.innerHTML="";
-    snap.forEach(u=>{
-      const li=document.createElement("li");
-      li.textContent=u.val();
-      users.appendChild(li);
-    });
-  });
-
-  db.ref(`rooms/${room}/state`).on("value", snap=>{
-    applyState(snap.val());
-  });
-}
-
-// ================= VIDEO CONTROLS & ODESÍLÁNÍ =================
-
-function loadVideo(){
-  const id = extractVideoID(videoUrl.value);
-  if(!id) return alert("Neplatný YouTube odkaz");
-
-  const controlsEnabled = document.getElementById('allowControl').checked;
-  if (!isHost && !controlsEnabled) {
-      alert("Pouze host nebo povolený uživatelé mohou vkládat videa.");
-      return;
-  }
+    if (isApplyingState) {
+        console.log("Already applying state, skipping");
+        return;
+    }
     
-  db.ref(`rooms/${room}/state`).set({
-    playing:true,
-    time:0,
-    ts:Date.now(),
-    videoID:id 
-  });
-  videoUrl.value = ""; 
+    isApplyingState = true;
+    console.log("Applying state:", data);
+    
+    const { playing, time, ts, videoID } = data;
+    const localState = player.getPlayerState();
+    const videoChanged = lastVideoID !== videoID;
+
+    // 1. Změna videa
+    if (videoChanged && videoID) {
+        console.log("Video changed to:", videoID);
+        lastVideoID = videoID;
+        pendingState = { playing, time, ts, videoID };
+        
+        player.loadVideoById(videoID);
+        setTimeout(() => { isApplyingState = false; }, 1000);
+        return;
+    }
+
+    // 2. Aplikace pending stavu po načtení videa
+    if (pendingState && pendingState.videoID === videoID) {
+        console.log("Applying pending state");
+        
+        if ([YT.PlayerState.PLAYING, YT.PlayerState.PAUSED, YT.PlayerState.BUFFERING, YT.PlayerState.CUED].includes(localState)) {
+            player.seekTo(pendingState.time, true);
+            
+            setTimeout(() => {
+                if (pendingState.playing && localState !== YT.PlayerState.PLAYING) {
+                    player.playVideo();
+                } else if (!pendingState.playing && localState !== YT.PlayerState.PAUSED) {
+                    player.pauseVideo();
+                }
+                pendingState = null;
+            }, 500);
+        }
+    }
+
+    // 3. Synchronizace času a stavu
+    if (!videoChanged && [YT.PlayerState.PLAYING, YT.PlayerState.PAUSED, YT.PlayerState.BUFFERING].includes(localState)) {
+        const delay = (Date.now() - ts) / 1000;
+        const syncTime = time + delay + 0.2;
+        const currentTime = player.getCurrentTime();
+        const timeDiff = Math.abs(currentTime - syncTime);
+
+        if (timeDiff > 2.0) {
+            console.log("Seeking to sync time, difference:", timeDiff);
+            player.seekTo(syncTime, true);
+        }
+        
+        if ((playing && localState !== YT.PlayerState.PLAYING) || 
+            (!playing && localState !== YT.PlayerState.PAUSED)) {
+            console.log("Syncing playback state");
+            if (playing) {
+                player.playVideo();
+            } else {
+                player.pauseVideo();
+            }
+        }
+    }
+
+    setTimeout(() => { isApplyingState = false; }, 500);
 }
 
-function onPlayerState(e){
-  if(isApplyingState || !room || !userRef || e.data === YT.PlayerState.CUED || e.data === YT.PlayerState.ENDED) return; 
-  
-  const controlsEnabled = document.getElementById('allowControl').checked;
-  if (!isHost && !controlsEnabled) {
-      return;
-  }
+function listenRoom() {
+    // Sledovat změny v seznamu uživatelů
+    db.ref(`rooms/${room}/users`).on("value", snap => {
+        const usersList = document.getElementById('users');
+        usersList.innerHTML = "";
+        
+        snap.forEach(user => {
+            const li = document.createElement("li");
+            li.textContent = user.val();
+            usersList.appendChild(li);
+        });
+    });
 
-  if(e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.PAUSED){
-      db.ref(`rooms/${room}/state`).set({
-        playing:e.data===YT.PlayerState.PLAYING,
-        time:player.getCurrentTime(),
-        ts:Date.now(),
-        videoID:lastVideoID 
-      });
-  }
+    // Sledovat změny stavu videa
+    db.ref(`rooms/${room}/state`).on("value", snap => {
+        if (snap.exists()) {
+            applyState(snap.val());
+        }
+    });
+}
+
+// ================= VIDEO CONTROLS =================
+function loadVideo() {
+    const urlInput = document.getElementById('videoUrl');
+    const videoUrl = urlInput.value.trim();
+    
+    console.log("Loading video from URL:", videoUrl);
+    
+    if (!videoUrl) {
+        alert("Prosím vložte YouTube odkaz");
+        return;
+    }
+    
+    const id = extractVideoID(videoUrl);
+    if (!id) {
+        alert("Neplatný YouTube odkaz. Zkontrolujte formát URL.");
+        return;
+    }
+    
+    const controlsEnabled = document.getElementById('allowControl').checked;
+    if (!isHost && !controlsEnabled) {
+        alert("Pouze host nebo uživatelé s povoleným ovládáním mohou načíst video.");
+        return;
+    }
+    
+    console.log("Setting new video:", id);
+    
+    // Resetovat stav
+    pendingState = null;
+    lastVideoID = id;
+    
+    // Odeslat nový stav do Firebase
+    const newState = {
+        playing: true,
+        time: 0,
+        ts: Date.now(),
+        videoID: id 
+    };
+    
+    db.ref(`rooms/${room}/state`).set(newState)
+        .then(() => {
+            console.log("Video state updated in Firebase");
+            urlInput.value = ""; // Vyčistit input
+        })
+        .catch(error => {
+            console.error("Error updating video state:", error);
+            alert("Chyba při načítání videa");
+        });
+}
+
+function onPlayerState(event) {
+    if (isApplyingState || !room || !userRef || !playerReady) return;
+    
+    // Ignorovat některé stavy
+    if ([YT.PlayerState.CUED, YT.PlayerState.ENDED, YT.PlayerState.UNSTARTED, YT.PlayerState.BUFFERING].includes(event.data)) {
+        return;
+    }
+    
+    const controlsEnabled = document.getElementById('allowControl').checked;
+    if (!isHost && !controlsEnabled) {
+        return;
+    }
+
+    // Synchronizovat pouze při PLAYING/PAUSED
+    if (event.data === YT.PlayerState.PLAYING || event.data === YT.PlayerState.PAUSED) {
+        const currentTime = player.getCurrentTime();
+        
+        const stateUpdate = {
+            playing: event.data === YT.PlayerState.PLAYING,
+            time: currentTime,
+            ts: Date.now(),
+            videoID: lastVideoID 
+        };
+        
+        db.ref(`rooms/${room}/state`).set(stateUpdate)
+            .catch(error => {
+                console.error("Error updating playback state:", error);
+            });
+    }
 }
 </script>
 
