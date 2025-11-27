@@ -312,6 +312,7 @@ function extractVideoID(url) {
 
 // ================= OVLÁDÁNÍ A SETUP =================
 function setupControls() {
+    // Naváže logiku hosta/kontroly na přepínač a tlačítko
     const controlSwitch = document.getElementById('allowControl');
     const roomControlRef = db.ref(`rooms/${room}/controlsEnabled`);
     const loadBtn = document.getElementById('loadVideoBtn');
@@ -377,7 +378,7 @@ function joinInternal() {
             return Promise.resolve();
         }
     }).then(() => {
-        setupControls();
+        setupControls(); // ZAVOLÁNO PO ÚSPĚŠNÉM PŘIPOJENÍ
         listenRoom();
     }).catch(error => {
         console.error("Error joining room:", error);
