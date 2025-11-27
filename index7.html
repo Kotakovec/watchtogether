@@ -176,23 +176,30 @@ let pendingState = null;
 let isHost = false; 
 
 window.onload = function() {
-  name = localStorage.getItem("name");
+    // KLÍČOVÁ ZMĚNA: Před připojením vyčistíme LocalStorage, pokud tam je "Anonymní divák"
+    if (localStorage.getItem("name") === "Anonymní divák") {
+        localStorage.removeItem("name");
+    }
+    
+    name = localStorage.getItem("name");
 
-  if (name) {
-    joinInternal();
-  } else {
-    document.getElementById('nameDialog').classList.remove('hidden');
-  }
+    if (name) {
+        joinInternal();
+    } else {
+        document.getElementById('nameDialog').classList.remove('hidden');
+    }
 };
 
-// Funkce pro odeslání jména z dialogu (VČETNĚ KONTROLY DUPLICITNÍCH JMEN)
+// Funkce pro odeslání jména z dialogu (VYNUCENÉ ZADÁNÍ JMÉNA)
 function submitName() {
     const inputField = document.getElementById('inputName');
     const rememberCheckbox = document.getElementById('rememberName');
     
     let tempName = inputField.value.trim();
+    
+    // VYNUCENÍ ZADÁNÍ JMÉNA
     if (tempName === "") {
-        alert("Prosím zadej platné jméno.");
+        alert("Prosím zadej své jméno, nemůže být prázdné.");
         return;
     }
     
@@ -251,35 +258,28 @@ function setupControls() {
     const urlInput = document.getElementById('videoUrl');
     const loadBtn = document.getElementById('loadVideoBtn');
 
-    // Host privilege: POUZE host může měnit přepínač
     if (isHost) {
         controlSwitch.disabled = false;
         
-        // Host nastavuje počáteční hodnotu
         roomControlRef.once('value').then(snap => {
             const enabled = snap.val() === true;
             controlSwitch.checked = enabled;
         });
 
-        // Host nastavuje stav v DB při změně
         controlSwitch.addEventListener('change', () => {
             roomControlRef.set(controlSwitch.checked);
         });
     } else {
-        // Ne-host má přepínač zakázaný
         controlSwitch.disabled = true;
     }
     
-    // Všichni poslouchají aktuální stav ovládání
     roomControlRef.on('value', snap => {
         const enabled = snap.val() === true;
         
-        // Aktualizuje stav přepínače pro ne-hosty (protože je mají disabled)
         if (!isHost) {
             controlSwitch.checked = enabled; 
         }
         
-        // Host (isHost=true) má VŽDY ovládání, ostatní jen pokud je povoleno (enabled=true)
         const isSelfControlling = isHost || enabled;
         urlInput.disabled = !isSelfControlling;
         loadBtn.disabled = !isSelfControlling;
@@ -293,7 +293,6 @@ function joinInternal(){
   
   db.ref("rooms/"+room).get().then(s=>{
     if(!s.exists()){
-      // První uživatel v místnosti je Host
       isHost = true;
       db.ref("rooms/"+room).set({
         users:{ [userRef.key]: name },
@@ -304,7 +303,7 @@ function joinInternal(){
       isHost = false; 
     }
     
-    setupControls(); // Nastaví přepínač
+    setupControls();
   });
   
   listenRoom();
@@ -392,7 +391,6 @@ function loadVideo(){
   if(!id) return alert("Neplatný YouTube odkaz");
 
   const controlsEnabled = document.getElementById('allowControl').checked;
-  // Zápis do DB povolen pouze Hostovi NEBO pokud je Ovládání povoleno
   if (!isHost && !controlsEnabled) {
       alert("Pouze host nebo povolený uživatelé mohou vkládat videa.");
       return;
@@ -411,7 +409,6 @@ function onPlayerState(e){
   if(isApplyingState || !room || !userRef || e.data === YT.PlayerState.CUED || e.data === YT.PlayerState.ENDED) return; 
   
   const controlsEnabled = document.getElementById('allowControl').checked;
-  // Zápis do DB povolen pouze Hostovi NEBO pokud je Ovládání povoleno
   if (!isHost && !controlsEnabled) {
       return;
   }
