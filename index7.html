@@ -26,7 +26,7 @@ body {
   width:260px;
   background:#111;
   display:flex;
-  flex-direction:column;
+  flex-direction:column; /* ZAJIŠŤUJE, ŽE OVLÁDACÍ PRVKY JSOU NAD SEZNAMEM */
   padding:10px;
 }
 #main {
@@ -58,7 +58,7 @@ input {
 #users {
   margin-top:6px;
   overflow:auto;
-  flex:1;
+  flex:1; /* KLÍČOVÉ: Aby seznam zabral zbytek místa */
   padding: 0;
   list-style: none;
 }
@@ -113,18 +113,22 @@ input {
 
 <div id="sidebar">
 
-    <div id="videoControls" style="margin-bottom: 20px;">
-    <div class="small">Vložit YouTube odkaz:</div>
-    <input id="videoUrl" placeholder="YouTube odkaz">
-    <button id="loadVideoBtn" onclick="loadVideo()">Načíst video</button>
+  <div id="controlPanel" style="padding-bottom: 20px;">
     
-    <div style="margin-top: 15px; font-size: 14px;">
-        <input type="checkbox" id="allowControl">
-        <label for="allowControl">Povolit ostatním ovládat video</label>
+    <div id="videoControls" style="margin-bottom: 5px;">
+      <div class="small">Vložit YouTube odkaz:</div>
+      <input id="videoUrl" placeholder="YouTube odkaz">
+      <button id="loadVideoBtn" onclick="loadVideo()">Načíst video</button>
     </div>
-  </div>
-  
-    <div class="small">Připojení lidé:</div>
+    
+    <div style="margin-top: 10px; font-size: 14px; display: flex; align-items: center;">
+        <input type="checkbox" id="allowControl" style="margin: 0 5px 0 0;">
+        <label for="allowControl" style="margin: 0; padding: 0;">Povolit ostatním ovládat video</label>
+    </div>
+    
+  </div>
+    
+    <div class="small" style="margin-top: 10px;">Připojení lidé:</div>
   <ul id="users">
       </ul>
 
@@ -169,7 +173,7 @@ let player;
 let isApplyingState = false; 
 let lastVideoID = null; 
 let pendingState = null;
-let isHost = false; // Určuje, zda je uživatel host (ten, kdo založil místnost/je první)
+let isHost = false; 
 
 window.onload = function() {
   name = localStorage.getItem("name");
@@ -239,7 +243,7 @@ function extractVideoID(url){
   return m ? m[1] : null;
 }
 
-// ================= OVLÁDÁNÍ A SETUP (OPRAVA HOST-ONLY EDITACE) =================
+// ================= OVLÁDÁNÍ A SETUP =================
 
 function setupControls() {
     const controlSwitch = document.getElementById('allowControl');
@@ -250,6 +254,13 @@ function setupControls() {
     // Host privilege: POUZE host může měnit přepínač
     if (isHost) {
         controlSwitch.disabled = false;
+        
+        // Host nastavuje počáteční hodnotu
+        roomControlRef.once('value').then(snap => {
+            const enabled = snap.val() === true;
+            controlSwitch.checked = enabled;
+        });
+
         // Host nastavuje stav v DB při změně
         controlSwitch.addEventListener('change', () => {
             roomControlRef.set(controlSwitch.checked);
@@ -303,7 +314,7 @@ window.addEventListener("beforeunload", () => {
   if(userRef) userRef.remove();
 });
 
-// ================= LISTEN & APPLY (Synchronizace - LOGIKA JE PŮVODNÍ, NESAHALO SE) =================
+// ================= LISTEN & APPLY (Synchronizace) =================
 
 function applyState(data) {
   if(!data || !player || !player.getCurrentTime) return;
@@ -374,7 +385,7 @@ function listenRoom(){
   });
 }
 
-// ================= VIDEO CONTROLS & ODESÍLÁNÍ (NOVÁ KONTROLA HOST+OVLÁDÁNÍ) =================
+// ================= VIDEO CONTROLS & ODESÍLÁNÍ =================
 
 function loadVideo(){
   const id = extractVideoID(videoUrl.value);
