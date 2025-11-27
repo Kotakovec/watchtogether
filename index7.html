@@ -11,16 +11,15 @@
 
 <style>
 /* CSS STYLY */
-html {
-  height: 100%; 
+html, body {
+  height: 100%; /* DŮLEŽITÉ PRO ZAJIŠTĚNÍ VÝŠKY */
+  margin: 0;
 }
 body {
-  margin:0;
   background:#0d0d0d;
   color:white;
   font-family:Arial;
   display:flex;
-  height:100vh;
 }
 #sidebar {
   width:260px;
@@ -28,8 +27,9 @@ body {
   display:flex;
   flex-direction:column;
   padding:10px;
+    /* OPRAVA PŘEKRÝVÁNÍ: Musí být výše než přehrávač */
     position: relative;
-    z-index: 10; /* Zajišťuje, že je sidebar nahoře a klikatelný */
+    z-index: 10; 
 }
 #main {
   flex:1;
@@ -69,14 +69,17 @@ input {
   background:#222;
   color:white;
 }
+#videoControls input {
+    width: calc(100% - 18px); /* OPRAVENÉ ZAROVNÁNÍ */
+}
 #users-container {
-    margin-top: 15px; /* Oddělení od ovládacích prvků */
-    flex-grow: 1; /* KLÍČOVÉ: Aby zabralo zbytek místa dole */
+    margin-top: 15px; 
+    flex-grow: 1; 
     overflow-y: auto;
 }
 #users {
   margin-top:6px;
-  overflow:visible; /* Umožní scrollovat */
+  overflow:visible; 
   padding: 0;
   list-style: none;
 }
@@ -136,7 +139,7 @@ input {
 
     <div id="videoControls" style="margin-top: 20px; margin-bottom: 5px;">
         <div class="small">YT Link:</div>
-        <input id="videoUrl" placeholder="Vložit odkaz" autocomplete="off" style="width: calc(100% - 18px);">
+        <input id="videoUrl" placeholder="Vložit odkaz" autocomplete="off">
         <button id="loadVideoBtn" class="control-button yellow" onclick="loadVideo()">▶️ NAČÍST VIDEO</button>
     </div>
     
