@@ -33,7 +33,6 @@ body {
   flex:1;
   display:flex;
   flex-direction:column;
-  /* Červený rámeček */
   border: 4px solid red; 
   min-height: 0;
 }
@@ -44,7 +43,7 @@ button,input {
   border-radius:4px;
 }
 button {
-  background:#ffc107; /* Žluté tlačítko */
+  background:#ffc107; 
   color:#333;
   font-weight: bold;
   cursor:pointer;
@@ -73,7 +72,12 @@ input {
 }
 .small { font-size:13px; color:#aaa; }
 
-/* Styly pro dialogové okno (pro jméno) */
+/* TŘÍDA PRO SKRÝVÁNÍ DIALOGU - OPRAVA */
+.hidden { 
+    display: none !important; 
+} 
+
+/* Styly pro dialogové okno */
 .dialog-overlay {
     position: fixed;
     top: 0;
@@ -191,6 +195,7 @@ function submitName() {
         localStorage.removeItem("name"); // Zajistíme, že se při příštím spuštění zeptáme
     }
     
+    // ZAVŘENÍ DIALOGU (Teď už to funguje díky opravě CSS)
     document.getElementById('nameDialog').classList.add('hidden');
     joinInternal(); 
 }
@@ -220,11 +225,9 @@ function extractVideoID(url){
 // ================= ROOM & USER MANAGEMENT =================
 
 function joinInternal(){
-  // Přidá uživatele do seznamu a zajistí, že po zavření okna zmizí
   userRef = db.ref(`rooms/${room}/users`).push(name);
   userRef.onDisconnect().remove(); 
   
-  // Inicializace místnosti, pokud neexistuje
   db.ref("rooms/"+room).get().then(s=>{
     if(!s.exists()){
       db.ref("rooms/"+room).set({
@@ -298,7 +301,6 @@ function applyState(data) {
 
 
 function listenRoom(){
-  // Listener pro Seznam uživatelů
   db.ref(`rooms/${room}/users`).on("value", snap=>{
     users.innerHTML="";
     snap.forEach(u=>{
@@ -308,7 +310,6 @@ function listenRoom(){
     });
   });
 
-  // Listener pro Stav místnosti (Video state)
   db.ref(`rooms/${room}/state`).on("value", snap=>{
     applyState(snap.val());
   });
