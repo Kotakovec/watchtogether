@@ -30,8 +30,10 @@ body {
   flex:1;
   display:flex;
   flex-direction:column;
-  /* Červený rámeček pro video sekci */
+  /* Zajišťuje červený rámeček, jak jsi chtěl */
   border: 4px solid red; 
+  /* Využívá celou zbývající plochu */
+  height: 100%;
 }
 button,input {
   padding:8px;
@@ -40,12 +42,11 @@ button,input {
   border-radius:4px;
 }
 button {
-  background:#ffc107; /* Žluté tlačítko pro načtení videa */
+  background:#ffc107; /* Žluté tlačítko */
   color:#333;
   font-weight: bold;
   cursor:pointer;
 }
-button.red { background:#b91c1c; }
 button:hover { opacity:0.9; }
 input {
   background:#222;
@@ -62,20 +63,14 @@ input {
   padding: 4px 0;
   border-bottom: 1px dotted #333;
 }
+/* Oprava: Player musí mít 100% rozměry v divu #main, aby bylo video vidět */
 #player {
   flex:1;
   background:black;
+  width: 100%;
+  height: 100%;
 }
 .small { font-size:13px; color:#aaa; }
-.code {
-  background:#222;
-  padding:6px;
-  border-radius:4px;
-  margin:6px 0;
-  font-weight:bold;
-  text-align:center;
-}
-.hidden { display:none; }
 </style>
 </head>
 
@@ -92,18 +87,16 @@ input {
     <div class="small">Připojení lidé:</div>
   <ul id="users">
       </ul>
-  
-    <button class="red" onclick="disconnect()" style="margin-top:auto;">Odpojit se (opustit místnost)</button>
 
 </div>
 
 <div id="main">
-  <div id="player"></div>
+    <div id="player"></div>
 </div>
 
 <script>
 // ================= FIREBASE =================
-// TVOJE KONFIGURACE (zachována z tvého kódu)
+// TVOJE KONFIGURACE
 const firebaseConfig = {
   apiKey: "AIzaSyBn6sJX5f9MIIXUSBWJDEc2zsDkr5Z7O0o",
   authDomain: "watchtogether-e67a5.firebaseapp.com",
@@ -119,7 +112,7 @@ const db = firebase.database();
 
 // ================= GLOBAL & SETUP =================
 
-// Pevně daná místnost
+// Pevně definovaná místnost pro synchronizaci
 const room = "room123"; 
 let name;
 let userRef = null;
@@ -129,7 +122,7 @@ let lastVideoID = null;
 
 // Spustí se hned po načtení stránky
 window.onload = function() {
-  // Zkus získat jméno z LocalStorage, jinak se zeptej
+  // Zkus získat jméno, jinak se zeptej, aby tě šlo zaznamenat v DB
   name = localStorage.getItem("name");
   if (!name) {
     name = prompt("Ahoj! Zadej prosím svoje jméno (bude vidět u ostatních):");
@@ -139,10 +132,11 @@ window.onload = function() {
     localStorage.setItem("name", name);
   }
   
-  joinInternal(); // Automaticky se připojí do pevné místnosti
+  // Spustí připojení do pevné místnosti a naslouchání
+  joinInternal(); 
 };
 
-// ================= YOUTUBE =================
+// ================= YOUTUBE API =================
 function onYouTubeIframeAPIReady() {
   player = new YT.Player("player", {
     width:"100%",
@@ -156,12 +150,12 @@ function extractVideoID(url){
   return m ? m[1] : null;
 }
 
-// ================= ROOM MANAGEMENT =================
+// ================= ROOM & USER MANAGEMENT =================
 
 function joinInternal(){
-  // Přidá uživatele do seznamu
+  // Přidá uživatele do seznamu a zajistí, že po zavření okna zmizí
   userRef = db.ref(`rooms/${room}/users`).push(name);
-  userRef.onDisconnect().remove(); // Zajistí, že po zavření okna zmizí
+  userRef.onDisconnect().remove(); 
   
   // Inicializace místnosti, pokud neexistuje (pro prvního uživatele)
   db.ref("rooms/"+room).get().then(s=>{
@@ -176,15 +170,13 @@ function joinInternal(){
   listenRoom();
 }
 
-function disconnect(){
+// Funkce pro ruční odstranění uživatele při opuštění stránky (dobré pro úklid)
+window.addEventListener("beforeunload", () => {
   if(userRef) userRef.remove();
-  localStorage.removeItem("name"); // Odstraníme jméno, aby se zeptal znovu
-  location.reload();
-}
+});
 
-// ================= LISTEN & APPLY =================
+// ================= LISTEN & APPLY (Synchronizace) =================
 
-// Funkce, která aplikuje stav z databáze na lokální přehrávač
 function applyState(data) {
   if(!data || !player || !player.getCurrentTime) return;
 
@@ -197,21 +189,20 @@ function applyState(data) {
   if (videoChanged && videoID) {
     lastVideoID = videoID;
     player.loadVideoById(videoID);
-    console.log(`SYNC: Načítám nové video: ${videoID}`);
     isApplyingState = false;
     return;
   }
 
   // 2. Synchronizace času a stavu
-  if (localState === YT.PlayerState.PLAYING || localState === YT.PlayerState.PAUSED) {
+  if (localState === YT.PlayerState.PLAYING || localState === YT.PlayerState.PAUSED || localState === YT.PlayerState.BUFFERING) {
       
       const delay = (Date.now() - ts) / 1000;
-      const syncTime = time + delay + 0.5; // +0.5s kvůli zpoždění
+      const syncTime = time + delay + 0.5;
       const timeDiff = Math.abs(player.getCurrentTime() - syncTime);
 
-      if (timeDiff > 1.5) { // Pokud je rozdíl větší než 1.5 sekundy, skočíme
+      // Posun, jen pokud je rozdíl větší než 1.5 sekundy
+      if (timeDiff > 1.5) { 
         player.seekTo(syncTime, true);
-        console.log(`SYNC: Korekce času na ${syncTime.toFixed(1)}s`);
       }
     
       // Synchronizace PLAY/PAUSE
@@ -249,7 +240,7 @@ function loadVideo(){
   const id = extractVideoID(videoUrl.value);
   if(!id) return alert("Neplatný YouTube odkaz");
 
-  // Odešle nový stav videa do DB. Zbytek se děje přes listener.
+  // Odešle nový stav videa do DB. 
   db.ref(`rooms/${room}/state`).set({
     playing:true,
     time:0,
@@ -259,7 +250,7 @@ function loadVideo(){
   videoUrl.value = ""; 
 }
 
-// Posílání lokální akce do Firebase (Odesílání)
+// Posílání lokální akce do Firebase
 function onPlayerState(e){
   // Pokud je stav aplikován z DB, ignorujeme
   if(isApplyingState || !room || !userRef) return; 
@@ -270,7 +261,7 @@ function onPlayerState(e){
         playing:e.data===YT.PlayerState.PLAYING,
         time:player.getCurrentTime(),
         ts:Date.now(),
-        videoID:lastVideoID // Udržujeme aktuální video ID
+        videoID:lastVideoID 
       });
   }
 }
