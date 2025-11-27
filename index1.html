@@ -2,11 +2,14 @@
 <html lang="cs">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Watch Together</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
+<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+
+<!-- YouTube API -->
 <script src="https://www.youtube.com/iframe_api"></script>
 
 <style>
@@ -16,12 +19,13 @@ body{
   color:white;
   font-family:Arial;
   display:flex;
-  height:100vh;
+  height:100vh
 }
 #sidebar{
-  width:220px;
+  width:260px;
   background:#111;
-  border-right:2px solid #222;
+  display:flex;
+  flex-direction:column;
   padding:10px;
 }
 #main{
@@ -30,121 +34,188 @@ body{
   flex-direction:column;
   padding:10px;
 }
-input,button{
+button,input{
   padding:8px;
-  font-size:16px;
+  margin:4px 0;
+  border:none;
+  border-radius:4px;
+}
+button{background:#2563eb;color:white;cursor:pointer}
+button:hover{background:#1d4ed8}
+input{background:#222;color:white}
+#users{
+  flex:1;
+  overflow:auto;
+  margin:10px 0;
 }
 #player{
   flex:1;
-  margin-top:10px;
+  background:black;
 }
+.small{font-size:13px;color:#aaa}
 </style>
 </head>
+
 <body>
 
+<!-- LEVÝ PANEL -->
 <div id="sidebar">
-<h3>Lidi</h3>
-<ul id="users"></ul>
+
+  <button onclick="createRoom()">Vytvořit místnost</button>
+  <button onclick="joinRoom()">Připojit se</button>
+
+  <div class="small">Připojení lidé:</div>
+  <ul id="users"></ul>
+
+  <div style="margin-top:auto">
+    <input id="videoUrl" placeholder="YouTube odkaz">
+    <button onclick="loadVideo()">Načíst video</button>
+  </div>
+
 </div>
 
+<!-- HLAVNÍ OBSAH -->
 <div id="main">
-<input id="videoId" placeholder="YouTube VIDEO ID (např. mzrdbF-TwFo)">
-<button onclick="setVideo()">Načíst video</button>
-<div id="player"></div>
+  <div id="player"></div>
 </div>
 
 <script>
-// ✅ FIREBASE
+// ================= FIREBASE CONFIG (TVŮJ) =================
 const firebaseConfig = {
   apiKey: "AIzaSyBn6sJX5f9MIIXUSBWJDEc2zsDkr5Z7O0o",
   authDomain: "watchtogether-e67a5.firebaseapp.com",
-  databaseURL: "https://watchtogether-e67a5-default-rtdb.firebaseio.com",
+  databaseURL: "https://watchtogether-e67a5-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "watchtogether-e67a5",
   storageBucket: "watchtogether-e67a5.appspot.com",
   messagingSenderId: "928834764710",
   appId: "1:928834764710:web:2b2bc562d7dd6f0e33d967"
 };
+
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ✅ ROOM
-const room = "room1";
-const username = "User_" + Math.floor(Math.random()*1000);
-
-// ✅ USERS
-db.ref(`rooms/${room}/users`).push(username);
-db.ref(`rooms/${room}/users`).on("value", snap=>{
-  const ul = document.getElementById("users");
-  ul.innerHTML="";
-  snap.forEach(u=>{
-    const li=document.createElement("li");
-    li.textContent=u.val();
-    ul.appendChild(li);
-  });
-});
-
-// ✅ YOUTUBE PLAYER
+// ================= GLOBAL =================
+let room = null;
+let name = null;
 let player;
+let pending = null;
 let ignore = false;
 
+// ================= YOUTUBE =================
 function onYouTubeIframeAPIReady(){
   player = new YT.Player("player",{
-    height:"100%",
     width:"100%",
-    videoId:"",
-    playerVars:{ autoplay:1 },
-    events:{ onStateChange:onPlayerState }
+    height:"100%",
+    playerVars:{
+      autoplay:1,
+      mute:1
+    },
+    events:{
+      onStateChange:onPlayerState
+    }
   });
 }
 
-// ✅ PLAYER EVENTS → FIREBASE
+// umí všechny běžné odkazy
+function extractVideoID(url){
+  const m = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11})/);
+  return m ? m[1] : null;
+}
+
+// ================= ROOM =================
+function createRoom(){
+  name = prompt("Tvoje jméno:");
+  if(!name) return;
+
+  room = Math.floor(100000 + Math.random()*900000).toString();
+
+  db.ref("rooms/"+room).set({
+    users:{},
+    state:{playing:false,time:0,ts:Date.now()}
+  });
+
+  joinRoomInternal();
+  alert("Kód místnosti: " + room);
+}
+
+function joinRoom(){
+  room = prompt("Zadej kód místnosti:");
+  if(!room) return;
+
+  name = prompt("Tvoje jméno:");
+  if(!name) return;
+
+  db.ref("rooms/"+room).get().then(s=>{
+    if(!s.exists()){
+      alert("Místnost neexistuje");
+    } else {
+      joinRoomInternal();
+    }
+  });
+}
+
+function joinRoomInternal(){
+  db.ref(`rooms/${room}/users`).push(name);
+  listenRoom();
+}
+
+// ================= LISTEN =================
+function listenRoom(){
+  db.ref(`rooms/${room}/users`).on("value", snap=>{
+    const ul = document.getElementById("users");
+    ul.innerHTML="";
+    snap.forEach(u=>{
+      const li=document.createElement("li");
+      li.textContent=u.val();
+      ul.appendChild(li);
+    });
+  });
+
+  db.ref(`rooms/${room}/state`).on("value", snap=>{
+    pending = snap.val();
+  });
+}
+
+// ================= VIDEO =================
+function loadVideo(){
+  if(!room) return alert("Nejsi v místnosti");
+
+  const url = document.getElementById("videoUrl").value;
+  const id = extractVideoID(url);
+  if(!id) return alert("Neplatný YouTube odkaz");
+
+  player.loadVideoById(id);
+
+  db.ref(`rooms/${room}/state`).set({
+    playing:true,
+    time:0,
+    ts:Date.now()
+  });
+}
+
 function onPlayerState(e){
-  if(ignore) return;
-  if(e.data === YT.PlayerState.PLAYING){
-    db.ref(`rooms/${room}/state`).set({
-      playing:true,
-      time:player.getCurrentTime()
-    });
+  if(e.data===YT.PlayerState.PLAYING && pending){
+    ignore=true;
+
+    const delay=(Date.now()-pending.ts)/1000;
+    player.seekTo((pending.time||0)+delay,true);
+
+    pending.playing ? player.playVideo() : player.pauseVideo();
+    pending=null;
+
+    setTimeout(()=>ignore=false,300);
   }
-  if(e.data === YT.PlayerState.PAUSED){
+
+  if(ignore || !room) return;
+
+  if(e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.PAUSED){
     db.ref(`rooms/${room}/state`).set({
-      playing:false,
-      time:player.getCurrentTime()
+      playing:e.data===YT.PlayerState.PLAYING,
+      time:player.getCurrentTime(),
+      ts:Date.now()
     });
   }
 }
-
-// ✅ FIREBASE → PLAYER
-db.ref(`rooms/${room}/state`).on("value",snap=>{
-  const s=snap.val();
-  if(!s || !player) return;
-  ignore=true;
-
-  if(Math.abs(player.getCurrentTime()-s.time)>1){
-    player.seekTo(s.time,true);
-  }
-  if(s.playing) player.playVideo();
-  else player.pauseVideo();
-
-  setTimeout(()=>ignore=false,300);
-});
-
-// ✅ LOAD VIDEO
-function setVideo(){
-  const id=document.getElementById("videoId").value.trim();
-  if(!/^[a-zA-Z0-9_-]{11}$/.test(id)){
-    alert("Musíš zadat VIDEO ID (11 znaků)");
-    return;
-  }
-  db.ref(`rooms/${room}/video`).set(id);
-}
-
-db.ref(`rooms/${room}/video`).on("value",snap=>{
-  const id=snap.val();
-  if(id && player){
-    player.loadVideoById(id);
-  }
-});
 </script>
 
 </body>
