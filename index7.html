@@ -29,7 +29,7 @@ body {
   flex-direction:column;
   padding:10px;
     position: relative;
-    z-index: 10; 
+    z-index: 10; /* Zajišťuje, že je sidebar nahoře a klikatelný */
 }
 #main {
   flex:1;
@@ -46,20 +46,22 @@ button,input {
   border:none;
   border-radius:4px;
 }
-/* Nové styly pro tlačítka vlevo nahoře */
+/* Styly pro tlačítka Mic/Hear/Play */
 .control-button {
-    background:#337ab7; /* Modrá barva */
+    background:#337ab7; 
     color:white;
     font-weight: bold;
     cursor:pointer;
-    width: 100px; /* Pevná šířka jako na obrázku */
+    width: 100px; 
     margin: 5px 0;
     padding: 8px 12px;
-    text-align: left; /* Text zarovnaný vlevo */
+    text-align: left; 
 }
 .control-button.yellow {
-    background: #ffc107; /* Žlutá pro "PLAY" */
+    background: #ffc107; 
     color: #333;
+    width: 100%; /* Plná šířka pro tlačítko Načíst */
+    text-align: center;
 }
 .control-button:hover { opacity:0.9; }
 
@@ -68,13 +70,13 @@ input {
   color:white;
 }
 #users-container {
-    margin-top: auto; /* Posune seznam uživatelů úplně dolů */
-    padding-top: 10px;
-    border-top: 1px solid #333;
+    margin-top: 15px; /* Oddělení od ovládacích prvků */
+    flex-grow: 1; /* KLÍČOVÉ: Aby zabralo zbytek místa dole */
+    overflow-y: auto;
 }
 #users {
   margin-top:6px;
-  overflow:auto;
+  overflow:visible; /* Umožní scrollovat */
   padding: 0;
   list-style: none;
 }
@@ -129,29 +131,25 @@ input {
 
 <div id="sidebar">
 
-  <div id="topControls" style="padding-bottom: 20px;">
-    
     <button class="control-button">🔊 MIC ON</button>
     <button class="control-button">🎧 HEAR ON</button>
 
     <div id="videoControls" style="margin-top: 20px; margin-bottom: 5px;">
-        <div class="small">Vložit YouTube odkaz:</div>
-        <input id="videoUrl" placeholder="YouTube odkaz" autocomplete="off">
-        <button id="loadVideoBtn" class="control-button yellow" onclick="loadVideo()" style="width: 100%;"> ▶️ PLAY</button>
+        <div class="small">YT Link:</div>
+        <input id="videoUrl" placeholder="Vložit odkaz" autocomplete="off" style="width: calc(100% - 18px);">
+        <button id="loadVideoBtn" class="control-button yellow" onclick="loadVideo()">▶️ NAČÍST VIDEO</button>
     </div>
     
-    <div style="margin-top: 10px; font-size: 14px; display: flex; align-items: center;">
+    <div style="margin-top: 10px; margin-bottom: 20px; font-size: 14px; display: flex; align-items: center;">
         <input type="checkbox" id="allowControl" style="margin: 0 5px 0 0;">
-        <label for="allowControl" style="margin: 0; padding: 0;">Povolit ostatním ovládat video</label>
+        <label for="allowControl" style="margin: 0; padding: 0;">Povolit ostatním ovládat</label>
     </div>
-    
-  </div>
-    
-  <div id="users-container">
-    <div class="small">Připojení lidé:</div>
-    <ul id="users">
-      </ul>
-  </div>
+
+    <div id="users-container">
+        <div class="small">Připojení lidé:</div>
+        <ul id="users">
+            </ul>
+    </div>
 
 </div>
 
