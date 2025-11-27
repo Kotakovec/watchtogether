@@ -11,7 +11,7 @@
             color: #f0f0f0;
             font-family: sans-serif;
             margin: 0;
-            overflow: hidden; /* Zabrání scrollování */
+            overflow: hidden; 
             height: 100vh;
         }
 
@@ -21,7 +21,7 @@
             width: 100vw;
         }
 
-        /* --- Levý Sidebar --- */
+        /* --- Levý Sidebar (Ovládání a Seznam) --- */
         .left-sidebar {
             width: 250px;
             padding: 10px;
@@ -36,26 +36,6 @@
             border-bottom: 1px solid #333;
         }
 
-        .controls-panel button {
-            margin-bottom: 5px;
-            width: 100%;
-            padding: 10px;
-            border: none;
-            cursor: pointer;
-            font-weight: bold;
-            border-radius: 4px;
-        }
-
-        .blue-btn {
-            background-color: #4a7dff; /* Modrá */
-            color: white;
-        }
-
-        .yellow-btn {
-            background-color: #ffc107; /* Žlutá */
-            color: #333;
-        }
-
         .video-loader {
             margin-top: 15px;
         }
@@ -67,6 +47,17 @@
             background-color: #333;
             color: #f0f0f0;
             border: 1px solid #555;
+            border-radius: 4px;
+        }
+
+        .yellow-btn {
+            background-color: #ffc107; /* Žlutá */
+            color: #333;
+            width: 100%;
+            padding: 10px;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
             border-radius: 4px;
         }
 
@@ -92,7 +83,7 @@
         }
 
         .active-user {
-            color: #ffc107; /* Žlutě označený aktuální uživatel */
+            color: #ffc107; 
             font-weight: bold;
         }
 
@@ -120,22 +111,19 @@
         <aside class="left-sidebar">
             
             <div class="controls-panel">
-                <button id="mic-on" class="control-btn blue-btn">🎙️ MIC ON</button>
-                <button id="hear-on" class="control-btn blue-btn">🎧 HEAR ON</button>
                 
                 <div class="video-loader">
-                    <input type="text" id="video-url" placeholder="YT Link" class="yellow-input">
-                    <button id="load-video-btn" class="control-btn yellow-btn">▶️ PLAY/NAČÍST</button>
+                    <input type="text" id="video-url" placeholder="Sem vlož YouTube URL" class="yellow-input">
+                    <button id="load-video-btn" class="yellow-btn">▶️ NAČÍST & SYNCHRONIZOVAT</button>
                 </div>
             </div>
             
             <div class="user-list-section">
                 <h2>Diváci</h2>
                 <ul id="active-users">
-                    <li>👤 Testovací Uživatel 5</li>
-                    <li>👤 Testovací Uživatel 4</li>
-                    <li class="active-user">👤 Jakub (Ty)</li>
-                    <li>👤 Testovací Uživatel 1</li>
+                    <li class="active-user">👤 Kuba (Ty)</li>
+                    <li>👤 Divák 2</li>
+                    <li>👤 Divák 1</li>
                 </ul>
             </div>
         </aside>
@@ -161,22 +149,20 @@
             projectId: "YOUR_PROJECT_ID",
             // ... další
         };
-        // Inicializace Firebase
         firebase.initializeApp(firebaseConfig);
 
-        // Odkaz na databázi pro konkrétní místnost (vždy používáme 'room1')
+        // Odkaz na databázi pro konkrétní místnost
         const roomRef = firebase.database().ref('room1'); 
+        let player; 
 
-        let player; // Globální proměnná pro YouTube přehrávač
-
-        // --- 1. Inicializace Přehrávače ---
+        // --- 1. Načtení Přehrávače a Pomocné funkce ---
 
         // Funkce, kterou zavolá YouTube API, když se načte
         function onYouTubeIframeAPIReady() {
             player = new YT.Player('youtube-player', {
                 height: '100%',
                 width: '100%',
-                videoId: 'dQw4w9WgXcQ', // Defaultní video ID (Rick Astley)
+                videoId: '', // Start bez videa
                 events: {
                     'onReady': onPlayerReady,
                     'onStateChange': onPlayerStateChange
@@ -185,19 +171,20 @@
         }
 
         function onPlayerReady(event) {
-            console.log("Přehrávač připraven. Poslouchám Firebase.");
+            console.log("Přehrávač připraven.");
             setupVideoLoader();
             setupFirebaseListeners();
         }
 
-        // --- 2. Načítání Videa ---
-
         // Získání YouTube ID z různých formátů URL
         function getYouTubeId(url) {
+            // Regulární výraz pro různé formáty YT URL (vč. zkrácené youtu.be)
             const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|\w\/\w+\?v=)|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/watch\?v=)([^&]+)/;
             const match = url.match(regex);
-            return (match && match[1]) ? match[1] : null;
+            return (match && match[1].length === 11) ? match[1] : null;
         }
+
+        // --- 2. Načítání Videa z Tlačítka ---
 
         function setupVideoLoader() {
             document.getElementById('load-video-btn').addEventListener('click', () => {
@@ -205,44 +192,48 @@
                 const videoId = getYouTubeId(url);
 
                 if (videoId) {
-                    // Odešle nové ID do Firebase, čímž se video změní všem
+                    // Pošle ID a nový stav (PLAYING od času 0) do Firebase
                     roomRef.update({
                         videoID: videoId,
-                        state: 'playing', // Začne se přehrávat hned po načtení
+                        state: 'playing', 
                         currentTime: 0,
                         lastUpdated: firebase.database.ServerValue.TIMESTAMP
+                    }).then(() => {
+                        console.log(`Nové video ${videoId} odesláno k synchronizaci.`);
+                        document.getElementById('video-url').value = ''; 
                     });
-                    document.getElementById('video-url').value = ''; 
                 } else {
-                    alert('Chyba: Neplatný YouTube odkaz.');
+                    alert('Chyba: Neplatný YouTube odkaz. Zkus zkopírovat celou URL.');
                 }
             });
         }
 
-        // --- 3. Synchronizace Stavů (Jádro funkčnosti) ---
+        // --- 3. Synchronizace Stavů ---
 
         // YT -> Firebase: Reakce na akci uživatele
         function onPlayerStateChange(event) {
-            // Zabraňuje zpětnému zápisu, pokud je stav měněn z DB (při synchronizaci)
-            if (player.isSyncing) return; 
+            if (player.isSyncing) return; // Zabraňuje zpětnému zápisu při synchronizaci
+            
+            const playerState = event.data;
+            const currentTime = player.getCurrentTime();
 
-            if (event.data == YT.PlayerState.PLAYING) {
+            if (playerState === YT.PlayerState.PLAYING) {
                 roomRef.update({
                     state: 'playing',
-                    currentTime: player.getCurrentTime(),
+                    currentTime: currentTime,
                     lastUpdated: firebase.database.ServerValue.TIMESTAMP
                 });
 
-            } else if (event.data == YT.PlayerState.PAUSED || event.data == YT.PlayerState.BUFFERING) {
+            } else if (playerState === YT.PlayerState.PAUSED || playerState === YT.PlayerState.BUFFERING) {
                 roomRef.update({
                     state: 'paused',
-                    currentTime: player.getCurrentTime(),
+                    currentTime: currentTime,
                     lastUpdated: firebase.database.ServerValue.TIMESTAMP
                 });
             }
         }
 
-        // Firebase -> YT: Poslouchání změn v databázi a synchronizace přehrávače
+        // Firebase -> YT: Poslouchání změn v databázi
         function setupFirebaseListeners() {
             roomRef.on('value', (snapshot) => {
                 const data = snapshot.val();
@@ -250,9 +241,9 @@
 
                 const { videoID, state, currentTime, lastUpdated } = data;
                 
-                // 1. Změna Videa
-                const currentVideoId = player.getVideoData().video_id;
-                if (currentVideoId !== videoID) {
+                // 1. Změna Videa: Načte video, pokud se v DB změnilo ID
+                const currentVideoId = player.getVideoData() ? player.getVideoData().video_id : null;
+                if (currentVideoId !== videoID && videoID) {
                      player.loadVideoById(videoID);
                      console.log(`Synchronizace: Načítám nové video: ${videoID}`);
                      return; 
@@ -260,32 +251,30 @@
 
                 // 2. Změna Stav (Play/Pause/Seek)
                 
-                // Nastavíme ochranu, aby se stav neodeslal zpět do DB
-                player.isSyncing = true; 
+                player.isSyncing = true; // Zapneme ochranu proti zpětnému zápisu
                 const localState = player.getPlayerState();
                 
                 if (state === 'playing' && localState !== YT.PlayerState.PLAYING) {
                     // Výpočet času s korekcí zpoždění sítě
                     const timeDiff = (Date.now() - lastUpdated) / 1000;
-                    const syncTime = currentTime + timeDiff + 0.5; // +0.5s pro korekci bufferu
+                    const syncTime = currentTime + timeDiff + 0.5; 
                     
                     player.seekTo(syncTime, true); 
                     player.playVideo();
-                    console.log(`Synchronizace: Přehrávám od času ${syncTime.toFixed(1)}`);
+                    console.log(`Synchronizace: Přehrávám od času ${syncTime.toFixed(1)}s`);
                 
                 } else if (state === 'paused' && localState !== YT.PlayerState.PAUSED && localState !== YT.PlayerState.ENDED) {
                     
                     // Přejde na přesný čas a zastaví
                     player.seekTo(currentTime, true); 
                     player.pauseVideo();
-                    console.log(`Synchronizace: Pozastavuji na čase ${currentTime.toFixed(1)}`);
+                    console.log(`Synchronizace: Pozastavuji na čase ${currentTime.toFixed(1)}s`);
                 }
                 
-                // Uvolníme ochranu po krátkém zpoždění
+                // Uvolníme ochranu po krátkém zpoždění, aby mohl uživatel zase ovládat
                 setTimeout(() => { player.isSyncing = false; }, 200); 
 
-                // Zde bys mohl přidat logiku pro aktualizaci seznamu uživatelů
-                // updateUserList(data.users);
+                // Zde bys mohl přidat aktualizaci seznamu uživatelů
             });
         }
     </script>
