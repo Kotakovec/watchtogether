@@ -2,367 +2,318 @@
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Speed Guardian Pro - BMW Edition</title>
-    <!-- Leaflet.js pro mapu -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Speed Guardian Pro</title>
+    
     <!-- PWA Manifest -->
-    <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlNwZWVkIEd1YXJkaWFuIiwKICAic2hvcnRfbmFtZSI6ICJTcGVlZEd1YXJkIiwKICAic3RhcnRfdXJsIjogIi4iLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMxYTFhMWEiLAogICJ0aGVtZV9jb2xvciI6ICIjZmYzYjMwIiwKICAiaWNvbnMiOiBbCiAgICB7CiAgICAgICJzcmMiOiAiaHR0cHM6Ly9jZG4taWNvbnMtcG5nLmZsYXRpY29uLmNvbS81MTIvMjg3LzI4NzYyOC5wbmciLAogICAgICAidHlwZSI6ICJpbWFnZS9wbmciLAogICAgICAic2l6ZXMiOiAiNTEyeDUxMiIKICAgIH0KICBdCn0=">
+    <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlNwZWVkIEd1YXJkaWFuIiwKICAic2hvcnRfbmFtZSI6ICJTcGVlZEd1YXJkIiwKICAic3RhcnRfdXJsIjogIi4iLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMwYzBjMGMiLAogICJ0aGVtZV9jb2xvciI6ICIjZmYzYjMwIiwKICAiaWNvbnMiOiBbCiAgICB7CiAgICAgICJzcmMiOiAiaHR0cHM6Ly9jZG4taWNvbnMtcG5nLmZsYXRpY29uLmNvbS81MTIvMjg3LzI4NzYyOC5wbmciLAogICAgICAidHlwZSI6ICJpbWFnZS9wbmciLAogICAgICAic2l6ZXMiOiAiNTEyeDUxMiIKICAgIH0KICAtdQpdCn0=">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    
+
+    <!-- Leaflet.js pro mapy -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <style>
         :root {
             --bg-color: #0c0c0c;
-            --card-bg: #161616;
-            --text-color: #ffffff;
+            --panel-bg: #161616;
             --accent-color: #ff3b30;
-            --success-color: #30d158;
-            --blue-color: #0a84ff;
+            --green-color: #04b033;
+            --text-color: #ffffff;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
         }
 
         body {
             margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: var(--bg-color);
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
             color: var(--text-color);
             height: 100vh;
             display: flex;
             flex-direction: column;
             overflow: hidden;
         }
-        
+
+        /* Mapa přes celou horní část */
         #map {
             flex: 1;
             width: 100%;
-        }
-        
-        .ui-panel {
-            background: var(--card-bg);
-            padding: 15px 20px;
-            display: flex;
-            align-items: center;
-            justify-content: space-around;
-            border-top: 2px solid #222;
-            box-shadow: 0 -5px 20px rgba(0,0,0,0.5);
-            z-index: 1000;
+            background-color: var(--bg-color);
         }
 
-        /* Dopravní značka */
-        .speed-sign {
-            width: 75px;
-            height: 75px;
-            border: 8px solid #ff3b30;
+        /* Tmavý filtr na mapové podklady */
+        .leaflet-tile-container {
+            filter: invert(100%) hue-rotate(180deg) brightness(60%) contrast(90%);
+        }
+
+        .leaflet-container {
+            background: var(--bg-color) !important;
+        }
+
+        /* Skrytí otravných ovládacích prvků mapy pro čistý vzhled */
+        .leaflet-control-attribution {
+            display: none !important;
+        }
+
+        /* Horní plovoucí status lišta */
+        .status-toast {
+            position: absolute;
+            top: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(22, 22, 22, 0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-size: 13px;
+            color: #aaa;
+            max-width: 90%;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .status-toast.error {
+            border-color: var(--accent-color);
+            color: #ff8e88;
+        }
+
+        /* Spodní ovládací panel */
+        .control-panel {
+            background-color: var(--panel-bg);
+            padding: 25px 20px 40px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-top: 1px solid #222;
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.7);
+            z-index: 1001;
+        }
+
+        /* Rychlostní značka (levá strana) */
+        .speed-limit-sign {
+            width: 85px;
+            height: 85px;
+            border: 8px solid var(--accent-color);
             border-radius: 50%;
-            background: white;
-            color: black;
+            background-color: #222;
+            color: var(--text-color);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 28px;
+            font-size: 30px;
             font-weight: 900;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.6);
-            flex-shrink: 0;
+            box-shadow: 0 4px 15px rgba(255, 59, 48, 0.2);
+            transition: border-color 0.3s ease;
         }
 
-        .speed-info {
+        /* Aktuální rychlost (střed) */
+        .current-speed-box {
             text-align: center;
-            min-width: 80px;
+            flex: 1;
         }
 
-        .speed-current {
-            font-size: 54px;
+        .speed-value {
+            font-size: 76px;
             font-weight: 900;
             line-height: 1;
             letter-spacing: -2px;
+            font-variant-numeric: tabular-nums;
         }
-        
+
         .speed-unit {
-            font-size: 14px;
+            font-size: 13px;
             color: #666;
             text-transform: uppercase;
             font-weight: bold;
-            margin-top: 2px;
+            margin-top: 4px;
+            letter-spacing: 1px;
         }
 
-        /* Tlačítko pro zvuk */
-        #audio-btn {
-            padding: 12px 24px;
-            border-radius: 50px;
-            border: none;
-            background: #2a2a2a;
-            color: #888;
-            font-weight: bold;
-            font-size: 15px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        }
-
-        #audio-btn.active {
-            background: var(--success-color);
+        /* Tlačítko pro zvuk (pravá strana) */
+        .gong-button {
+            background-color: var(--green-color);
             color: white;
-            box-shadow: 0 4px 12px rgba(48, 209, 88, 0.3);
+            border: none;
+            padding: 14px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(4, 176, 51, 0.3);
+            transition: all 0.2s ease;
+            min-width: 120px;
+            text-align: center;
         }
 
-        /* Status panel */
-        .map-overlay {
-            position: absolute;
-            top: 15px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(22, 22, 22, 0.85);
-            backdrop-filter: blur(10px);
-            padding: 8px 15px;
-            border-radius: 30px;
-            font-size: 11px;
-            color: #ccc;
-            z-index: 1000;
-            pointer-events: none;
-            border: 1px solid #333;
-            text-align: center;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-            white-space: nowrap;
+        .gong-button.muted {
+            background-color: #333;
+            box-shadow: none;
+            color: #888;
+        }
+
+        .gong-button:active {
+            transform: scale(0.95);
         }
     </style>
 </head>
 <body>
 
-<div class="map-overlay" id="status-overlay">
-    Inicializuji GPS a stahuji okolí...
-</div>
+<!-- Status hlášky nahoře -->
+<div class="status-toast" id="status">Stabilizuji GPS připojení...</div>
 
+<!-- Mapa -->
 <div id="map"></div>
 
-<div class="ui-panel">
-    <!-- Dopravní značka s rychlostním limitem -->
-    <div class="speed-sign" id="sign">--</div>
+<!-- Spodní Panel -->
+<div class="control-panel">
+    <!-- Dopravní značka s limitem -->
+    <div class="speed-limit-sign" id="limit-sign">--</div>
     
     <!-- Aktuální rychlost -->
-    <div class="speed-info">
-        <div class="speed-current" id="speed">0</div>
-        <div class="speed-unit">km/h</div>
+    <div class="current-speed-box">
+        <div class="speed-value" id="current-speed">0</div>
+        <div class="speed-unit">KM/H</div>
     </div>
 
-    <!-- Vypínač BMW gongu -->
-    <button id="audio-btn" class="active">Gong: ZAP</button>
+    <!-- Přepínač zvuku -->
+    <button class="gong-button" id="gong-btn">Gong: ZAP</button>
 </div>
 
 <script>
-    let map, marker, accuracyCircle;
-    let audioEnabled = true;
+    let map, userMarker, accuracyCircle;
+    let speechEnabled = true;
     let currentLimit = 50; 
     let lastSpokenTime = 0;
-    const alertDelay = 3500; // Jak často má gong zaznít, pokud stále překračuješ rychlost
+    const speechDelay = 3500; // Zamezení koktání hlasu
 
+    // Lokální databáze silnic v operační paměti
     let localRoadsDatabase = [];
     let lastFetchedArea = null;
 
-    const speedElement = document.getElementById('speed');
-    const signElement = document.getElementById('sign');
-    const audioBtn = document.getElementById('audio-btn');
-    const statusOverlay = document.getElementById('status-overlay');
+    // Více záložních Overpass serverů pro eliminaci výpadků
+    const OVERPASS_SERVERS = [
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://lz4.overpass-api.de/api/interpreter",
+        "https://z.overpass-api.de/api/interpreter"
+    ];
+    let currentServerIndex = 0;
 
-    // Inicializace audio kontextu
-    let audioCtx = null;
+    const statusElement = document.getElementById('status');
+    const speedElement = document.getElementById('current-speed');
+    const limitSignElement = document.getElementById('limit-sign');
+    const gongBtn = document.getElementById('gong-btn');
 
-    function initAudio() {
-        if (!audioCtx) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-    }
-
-    // Funkce simulující BMW Gong přes Web Audio API
-    function playBmwGong() {
-        initAudio();
-        if (!audioCtx) return;
-
-        // Pokud je kontext uspaný (prohlížeče vyžadují první interakci), probudíme ho
-        if (audioCtx.state === 'suspended') {
-            audioCtx.resume();
-        }
-
-        const now = audioCtx.currentTime;
-
-        // BMW gong je tvořen dvěma hlavními tóny (kolem 660 Hz - E5 a mírně rozladěným druhým tónem)
-        const osc1 = audioCtx.createOscillator();
-        const osc2 = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-
-        // Nastavení frekvencí
-        osc1.type = 'sine';
-        osc1.frequency.setValueAtTime(659.25, now); // E5 tón
-
-        osc2.type = 'triangle'; // Trojúhelník dodá ten lehce kovový/jemný akustický tón
-        osc2.frequency.setValueAtTime(661.00, now); // Mírný detune pro bohatší zvuk
-
-        // Obálka hlasitosti (rychlý náběh a pomalé doznívání jako u skutečného zvonku)
-        gainNode.gain.setValueAtTime(0, now);
-        gainNode.gain.linearRampToValueAtTime(0.5, now + 0.05); // Rychlý náběh (attack)
-        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1.8); // Dlouhý dozvuk (decay)
-
-        // Propojení
-        osc1.connect(gainNode);
-        osc2.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-
-        // Spuštění a zastavení
-        osc1.start(now);
-        osc2.start(now);
-        
-        osc1.stop(now + 1.8);
-        osc2.stop(now + 1.8);
-    }
-
-    // Inicializace mapy
-    function initMap() {
+    // Inicializace mapy a GPS
+    function init() {
+        // Výchozí pozice Brno, dokud se nenačte GPS
         map = L.map('map', { 
             zoomControl: false,
             attributionControl: false 
-        }).setView([49.195, 16.608], 16); // Brno střed default
-        
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            maxZoom: 19
-        }).addTo(map);
+        }).setView([49.195, 16.608], 16);
 
-        marker = L.marker([49.195, 16.608]).addTo(map);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        // Vzhled markeru pozice uživatele
+        const pulseIcon = L.divIcon({
+            className: 'custom-div-icon',
+            html: `<div style="background-color: #0a84ff; width: 16px; height: 16px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 10px rgba(10,132,255,0.8);"></div>`,
+            iconSize: [16, 16],
+            iconAnchor: [8, 8]
+        });
+
+        userMarker = L.marker([49.195, 16.608], { icon: pulseIcon }).addTo(map);
         accuracyCircle = L.circle([49.195, 16.608], {
-            radius: 10,
+            radius: 0,
             fillColor: '#0a84ff',
             fillOpacity: 0.15,
-            color: '#0a84ff',
-            weight: 1
+            color: 'transparent'
         }).addTo(map);
+
+        // Zapnutí neustálého sledování polohy
+        if ("geolocation" in navigator) {
+            navigator.geolocation.watchPosition(onLocationSuccess, onLocationError, {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            });
+        } else {
+            showStatus("Chyba: GPS není podporováno.", true);
+        }
     }
 
-    // Tlačítko pro zapnutí/vypnutí zvuku
-    audioBtn.addEventListener('click', () => {
-        audioEnabled = !audioEnabled;
-        if (audioEnabled) {
-            audioBtn.textContent = "Gong: ZAP";
-            audioBtn.classList.add('active');
-            playBmwGong(); // Zkušební přehrání při zapnutí
+    // Obsluha tlačítka hlasu
+    gongBtn.addEventListener('click', () => {
+        speechEnabled = !speechEnabled;
+        if (speechEnabled) {
+            gongBtn.textContent = "Gong: ZAP";
+            gongBtn.classList.remove('muted');
+            speak("Voice alerts active");
         } else {
-            audioBtn.textContent = "Gong: VYP";
-            audioBtn.classList.remove('active');
+            gongBtn.textContent = "Gong: VYP";
+            gongBtn.classList.add('muted');
         }
     });
 
-    // Start GPS
-    if ("geolocation" in navigator) {
-        navigator.geolocation.watchPosition(onSuccess, onError, {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0
-        });
-    } else {
-        statusOverlay.textContent = "Chyba: GPS není podporováno!";
-    }
-
-    async function onSuccess(position) {
+    // Zpracování GPS koordinátů
+    async function onLocationSuccess(position) {
         const coords = position.coords;
         const lat = coords.latitude;
         const lon = coords.longitude;
-        
+
+        // Převod rychlosti z m/s na km/h
         let speedKMH = Math.round((coords.speed || 0) * 3.6);
         if (speedKMH < 0) speedKMH = 0;
 
-        const newLatLng = new L.LatLng(lat, lon);
-        marker.setLatLng(newLatLng);
-        accuracyCircle.setLatLng(newLatLng);
-        accuracyCircle.setRadius(coords.accuracy);
-        map.panTo(newLatLng);
-
+        // Update UI prvků
         speedElement.textContent = speedKMH;
+        userMarker.setLatLng([lat, lon]);
+        accuracyCircle.setLatLng([lat, lon]).setRadius(coords.accuracy);
+        map.setView([lat, lon], 16);
 
+        // Načtení širšího okolí na pozadí (pokud jsme se posunuli)
         triggerBackgroundPrefetch(lat, lon);
 
+        // Bleskové porovnání s lokální staženou db
         const matchedLimit = findLimitInLocalDatabase(lat, lon);
-        
         if (matchedLimit !== null) {
             currentLimit = matchedLimit;
-            signElement.textContent = currentLimit;
-        } else {
-            signElement.textContent = "--";
+            limitSignElement.textContent = currentLimit;
         }
 
-        // Kontrola překročení rychlosti o víc než 2 km/h
-        if (speedKMH >= (currentLimit + 2) && currentLimit > 0) {
+        // Výpočet překročení rychlosti (+ 2 km/h)
+        if (speedKMH >= (currentLimit + 2) && speechEnabled) {
             triggerAlert();
         }
     }
 
-    function onError(error) {
+    function onLocationError(error) {
         console.error(error);
-        statusOverlay.textContent = "Chyba GPS: " + error.message;
+        showStatus("Ztráta GPS signálu...", true);
     }
 
-    function findLimitInLocalDatabase(lat, lon) {
-        if (localRoadsDatabase.length === 0) return null;
-
-        let closestRoad = null;
-        let minDistance = 30; 
-
-        for (const road of localRoadsDatabase) {
-            const dist = getDistance(lat, lon, road.lat, road.lon);
-            if (dist < minDistance) {
-                minDistance = dist;
-                closestRoad = road;
-            }
+    // Pomocná funkce pro zobrazení toast zprávy nahoře
+    function showStatus(text, isError = false) {
+        statusElement.textContent = text;
+        if (isError) {
+            statusElement.classList.add('error');
+        } else {
+            statusElement.classList.remove('error');
         }
-
-        return closestRoad ? closestRoad.limit : null;
+        statusElement.style.opacity = "1";
     }
 
-    async function triggerBackgroundPrefetch(lat, lon) {
-        if (!lastFetchedArea || getDistance(lastFetchedArea.lat, lastFetchedArea.lon, lat, lon) > 400) {
-            lastFetchedArea = { lat, lon };
-            statusOverlay.textContent = "Aktualizuji rychlostní mapu okolí...";
-
-            const radius = 1000; 
-            const query = `[out:json];way(around:${radius},${lat},${lon})["maxspeed"];out tags center;`;
-            const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
-
-            try {
-                const response = await fetch(url);
-                if (!response.ok) throw new Error("Chyba API");
-                const data = await response.json();
-
-                if (data.elements) {
-                    const newRoads = data.elements.map(el => {
-                        let rawLimit = el.tags.maxspeed;
-                        let limitNum = 50; 
-
-                        if (rawLimit === "urban" || rawLimit.includes("urban")) limitNum = 50;
-                        else if (rawLimit === "rural" || rawLimit.includes("rural")) limitNum = 90;
-                        else if (rawLimit === "motorway" || rawLimit.includes("motorway")) limitNum = 130;
-                        else {
-                            const parsed = parseInt(rawLimit);
-                            if (!isNaN(parsed)) limitNum = parsed;
-                        }
-
-                        return {
-                            lat: el.center.lat,
-                            lon: el.center.lon,
-                            limit: limitNum
-                        };
-                    });
-
-                    localRoadsDatabase = [...localRoadsDatabase, ...newRoads].filter(
-                        (road, index, self) =>
-                            index === self.findIndex((r) => r.lat === road.lat && r.lon === road.lon)
-                    );
-
-                    statusOverlay.textContent = `Aktivní (Načteno ${localRoadsDatabase.length} úseků)`;
-                }
-            } catch (e) {
-                console.warn("Chyba stahování mapových dat:", e);
-                statusOverlay.textContent = "Chyba stahování limitů (zkusím znovu za chvíli)";
-            }
-        }
-    }
-
+    // Haversine formula pro vzdálenost bodů v metrech
     function getDistance(lat1, lon1, lat2, lon2) {
         const R = 6371000;
         const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -374,17 +325,118 @@
         return R * c;
     }
 
+    // Vyhledání nejbližší silnice v lokální in-memory paměti
+    function findLimitInLocalDatabase(lat, lon) {
+        if (localRoadsDatabase.length === 0) return null;
+
+        let closestRoad = null;
+        let minDistance = 35; // hledáme silnici v okruhu maximálně 35 metrů
+
+        for (const road of localRoadsDatabase) {
+            const dist = getDistance(lat, lon, road.lat, road.lon);
+            if (dist < minDistance) {
+                minDistance = dist;
+                closestRoad = road;
+            }
+        }
+        return closestRoad ? closestRoad.limit : null;
+    }
+
+    // Pomocný fetch s timeoutem pro slabý mobilní signál
+    async function fetchWithTimeout(resource, options = {}) {
+        const { timeout = 6000 } = options;
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeout);
+        try {
+            const response = await fetch(resource, { ...options, signal: controller.signal });
+            clearTimeout(id);
+            return response;
+        } catch (error) {
+            clearTimeout(id);
+            throw error;
+        }
+    }
+
+    // Předstahování oblasti na pozadí ze záložních serverů
+    async function triggerBackgroundPrefetch(lat, lon) {
+        if (!lastFetchedArea || getDistance(lastFetchedArea.lat, lastFetchedArea.lon, lat, lon) > 500) {
+            lastFetchedArea = { lat, lon };
+            
+            const radius = 1000; // stahujeme 1km kruh kolem pozice
+            const query = `[out:json][timeout:10];way(around:${radius},${lat},${lon})["maxspeed"];out tags center;`;
+            
+            let success = false;
+            let attempts = 0;
+
+            while (!success && attempts < 3) {
+                const serverUrl = OVERPASS_SERVERS[currentServerIndex];
+                const url = `${serverUrl}?data=${encodeURIComponent(query)}`;
+                
+                try {
+                    const response = await fetchWithTimeout(url, { timeout: 5000 });
+                    if (!response.ok) throw new Error();
+                    
+                    const data = await response.json();
+
+                    if (data.elements) {
+                        const newRoads = data.elements.map(el => {
+                            let rawLimit = el.tags.maxspeed;
+                            let limitNum = 50; 
+
+                            if (rawLimit === "urban" || rawLimit.includes("urban")) limitNum = 50;
+                            else if (rawLimit === "rural" || rawLimit.includes("rural")) limitNum = 90;
+                            else if (rawLimit === "motorway" || rawLimit.includes("motorway")) limitNum = 130;
+                            else {
+                                const parsed = parseInt(rawLimit);
+                                if (!isNaN(parsed)) limitNum = parsed;
+                            }
+
+                            return {
+                                lat: el.center.lat,
+                                lon: el.center.lon,
+                                limit: limitNum
+                            };
+                        });
+
+                        localRoadsDatabase = [...localRoadsDatabase, ...newRoads];
+                        showStatus("Limity silnic aktualizovány.");
+                        success = true;
+                    }
+                } catch (e) {
+                    console.warn(`Server ${serverUrl} neodpovídá, zkouším záložní...`);
+                    currentServerIndex = (currentServerIndex + 1) % OVERPASS_SERVERS.length;
+                    attempts++;
+                }
+            }
+
+            if (!success) {
+                showStatus("Chyba stahování limitů (zkusím znovu za chvíli)", true);
+            }
+        }
+    }
+
+    // Text-to-Speech upozornění
+    function speak(text) {
+        if ('speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-US';
+            utterance.rate = 1.1;
+            window.speechSynthesis.speak(utterance);
+        }
+    }
+
     function triggerAlert() {
         const now = Date.now();
-        if (audioEnabled && (now - lastSpokenTime > alertDelay)) {
-            playBmwGong();
+        if (now - lastSpokenTime > speechDelay) {
+            speak("Slow down");
             lastSpokenTime = now;
         }
     }
 
-    initMap();
+    // Spuštění po načtení stránky
+    window.onload = init;
 
-    // Service Worker
+    // Registrace Service Workeru
     if ('serviceWorker' in navigator) {
         const swCode = `
             self.addEventListener('install', (e) => self.skipWaiting());
