@@ -6,7 +6,7 @@
     <title>Speed Guardian Online</title>
     
     <!-- PWA Manifest -->
-    <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlNwZWVkIEd1YXJkaWFuIiwKICAic2hvcnRfbmFtZSI6ICJTcGVlZEd1YXJkIiwKICAic3RhcnRfdXJsIjogIi4iLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMwYzBjMGMiLAogICJ0aGVtZV9jb2xvciI6ICIjZmYzYjMwIiwKICAiaWNvbnMiOiBbCiAgICB7CiAgICAgICJzcmMiOiAiaHR0cHM6Ly9jZG4taWNvbnMtcG5nLmZsYXRpY29uLmNvbS81MTIvMjg3LzI4NzYyOC5wbmciLAogICAgICAidHlwZSI6ICJpbWFnZS9wbmciLAogICAgICAic2l6ZXMiOiAiNTEyeDUxMiIKICAgIH0KICBdCn0=">
+    <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlNwZWVkIEd1YXJkaWFuIiwKICAic2hvcnRfbmFtZSI6ICJTcGVlZEd1YXJkIiwKICAic3RhcnRfdXJsIjogIi4iLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMwYzBjMGMiLAogICJ0aGVtZV9jb2xvciI6ICIjZmYzYjMwIiwKICAiaWNvbnMiOiBbCiAgICB7CiAgICAgICJzcmMiOiAiaHR0cHM6Ly9jZG4taWNvbnMtcG5nLmZsYXRpY29uLmNvbS81MTIvMjg3LzI4NzYyOC5wbmciLAogICAgICAidHlwZSI6ICJpbWFnZS9wbmciLAogICAgICAidHlwZSI6ICI1MTJ4NTEyIgogICAgfQogIF0KfQ==">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
@@ -58,7 +58,7 @@
             display: none !important;
         }
 
-        /* Horní plovoucí status lišta - decentnější a bez červených chyb */
+        /* Horní plovoucí status lišta */
         .status-toast {
             position: absolute;
             top: 40px;
@@ -176,16 +176,22 @@
     let map, userMarker, accuracyCircle;
     let gongEnabled = true;
     let currentLimit = 50; 
-    let lastGongTime = 0;
-    const gongDelay = 5000; // Gong zazní maximálně jednou za 5 sekund při trvalém překročení
+    let currentSpeed = 0;
+
+    // Pole pro uchování projeté trasy
+    let routeHistory = [];
+    let glowPolyline, corePolyline;
+
+    // Řízení pípací smyčky
+    let beepIntervalId = null;
+    let currentBeepSpeedMode = null; 
 
     // Řízení síťových dotazů
     let isFetching = false;
     let lastQueryTime = 0;
     let lastQueryCoords = null;
-    const minQueryInterval = 2000; // Dotaz na server max jednou za 2 sekundy
+    const minQueryInterval = 2000; 
 
-    // Audio Context pro generování opravdového elektronického GONGU
     let audioCtx = null;
 
     const OVERPASS_SERVERS = [
@@ -208,6 +214,19 @@
         }).setView([49.195, 16.608], 16);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        // Vykreslení čáry trasy (Glow efekt)
+        glowPolyline = L.polyline([], {
+            color: '#00bfff',
+            weight: 12,
+            opacity: 0.4
+        }).addTo(map);
+
+        corePolyline = L.polyline([], {
+            color: '#ffffff',
+            weight: 4,
+            opacity: 0.9
+        }).addTo(map);
 
         const pulseIcon = L.divIcon({
             className: 'custom-div-icon',
@@ -235,7 +254,6 @@
         }
     }
 
-    // Inicializace zvuku při prvním kliknutí (prohlížeče blokují zvuk bez interakce)
     function initAudio() {
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -248,10 +266,11 @@
         if (gongEnabled) {
             gongBtn.textContent = "Gong: ZAP";
             gongBtn.classList.remove('muted');
-            playGongSound(); // Krátký testovací gong
+            playSingleBeep(0.1); 
         } else {
             gongBtn.textContent = "Gong: VYP";
             gongBtn.classList.add('muted');
+            stopBeepLoop();
         }
     });
 
@@ -260,21 +279,44 @@
         const lat = coords.latitude;
         const lon = coords.longitude;
 
-        let speedKMH = Math.round((coords.speed || 0) * 3.6);
-        if (speedKMH < 0) speedKMH = 0;
+        currentSpeed = Math.round((coords.speed || 0) * 3.6);
+        if (currentSpeed < 0) currentSpeed = 0;
 
-        speedElement.textContent = speedKMH;
+        speedElement.textContent = currentSpeed;
         userMarker.setLatLng([lat, lon]);
         accuracyCircle.setLatLng([lat, lon]).setRadius(coords.accuracy);
         map.setView([lat, lon], 17);
 
-        // Hledání limitu online
+        // Záznam trasy
+        const currentPoint = [lat, lon];
+        if (routeHistory.length === 0 || getDistance(routeHistory[routeHistory.length - 1][0], routeHistory[routeHistory.length - 1][1], lat, lon) > 3) {
+            routeHistory.push(currentPoint);
+            
+            if (routeHistory.length > 1000) {
+                routeHistory.shift();
+            }
+
+            glowPolyline.setLatLngs(routeHistory);
+            corePolyline.setLatLngs(routeHistory);
+        }
+
+        // Fallback limity podle rychlosti
+        if (currentSpeed > 95 && currentLimit < 90) {
+            currentLimit = 130;
+            limitSignElement.textContent = currentLimit;
+        } else if (currentSpeed > 55 && currentSpeed <= 95 && currentLimit === 50) {
+            currentLimit = 90;
+            limitSignElement.textContent = currentLimit;
+        } else if (currentSpeed <= 40 && currentLimit > 50) {
+            currentLimit = 50;
+            limitSignElement.textContent = currentLimit;
+        }
+
+        // Dotaz na aktuální limit
         fetchCurrentRoadLimitOnline(lat, lon);
 
-        // Pokud jedeme rychleji než limit + 2 km/h
-        if (speedKMH >= (currentLimit + 2) && gongEnabled) {
-            triggerGong();
-        }
+        // Pípání
+        evaluateBeepState();
     }
 
     function onLocationError(error) {
@@ -315,7 +357,6 @@
     async function fetchCurrentRoadLimitOnline(lat, lon) {
         const now = Date.now();
         
-        // Pokud stojíme nebo jsme se nepohnuli o víc než 10 metrů, dotaz na server vůbec neposíláme
         if (lastQueryCoords) {
             const distanceMoved = getDistance(lastQueryCoords.lat, lastQueryCoords.lon, lat, lon);
             if (distanceMoved < 10 && (now - lastQueryTime) < 10000) {
@@ -365,7 +406,6 @@
                     success = true; 
                 }
             } catch (e) {
-                // Tiše rotujeme servery na pozadí, na displeji neukazujeme žádné otravné chyby
                 currentServerIndex = (currentServerIndex + 1) % OVERPASS_SERVERS.length;
                 attempts++;
             }
@@ -374,8 +414,45 @@
         isFetching = false;
     }
 
-    // Čistý elektronický GONG generovaný přímo v telefonu
-    function playGongSound() {
+    function evaluateBeepState() {
+        if (!gongEnabled) {
+            stopBeepLoop();
+            return;
+        }
+
+        const overSpeed = currentSpeed - currentLimit;
+
+        if (overSpeed >= 10) {
+            startBeepLoop("fast", 100);
+        } else if (overSpeed >= 2) {
+            startBeepLoop("slow", 333);
+        } else {
+            stopBeepLoop();
+        }
+    }
+
+    function startBeepLoop(mode, msInterval) {
+        if (currentBeepSpeedMode === mode) return;
+
+        stopBeepLoop();
+
+        currentBeepSpeedMode = mode;
+        playSingleBeep(mode === "fast" ? 0.05 : 0.08);
+
+        beepIntervalId = setInterval(() => {
+            playSingleBeep(mode === "fast" ? 0.05 : 0.08);
+        }, msInterval);
+    }
+
+    function stopBeepLoop() {
+        if (beepIntervalId !== null) {
+            clearInterval(beepIntervalId);
+            beepIntervalId = null;
+        }
+        currentBeepSpeedMode = null;
+    }
+
+    function playSingleBeep(duration) {
         try {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             if (audioCtx.state === 'suspended') {
@@ -388,40 +465,67 @@
             osc.connect(gainNode);
             gainNode.connect(audioCtx.destination);
 
-            // Nastavení frekvence (880Hz je čistý tón vysokého pípnutí/gongu)
             osc.type = 'sine';
-            osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+            osc.frequency.setValueAtTime(950, audioCtx.currentTime);
 
-            // Nastavení hlasitosti a rychlého dozvuku (fade out)
-            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+            gainNode.gain.setValueAtTime(0.4, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
 
             osc.start(audioCtx.currentTime);
-            osc.stop(audioCtx.currentTime + 0.4);
+            osc.stop(audioCtx.currentTime + duration);
         } catch (e) {
-            console.error("Nepodařilo se přehrát gong:", e);
-        }
-    }
-
-    function triggerGong() {
-        const now = Date.now();
-        if (now - lastGongTime > gongDelay) {
-            playGongSound();
-            lastGongTime = now;
+            console.error(e);
         }
     }
 
     window.onload = init;
 
-    // Registrace Service Workeru
+    // --- AKTUALIZAČNÍ LOGIKA PRO PWA (BEZ MAZÁNÍ IKONY) ---
     if ('serviceWorker' in navigator) {
+        // Vygenerování aktualizačního Service Workeru jako Blob
         const swCode = `
-            self.addEventListener('install', (e) => self.skipWaiting());
-            self.addEventListener('fetch', (e) => {});
+            const CACHE_NAME = 'speed-guardian-v1';
+            
+            self.addEventListener('install', (e) => {
+                // Přeskočí čekání na zavření všech záložek a ihned se aktivuje
+                self.skipWaiting();
+            });
+
+            self.addEventListener('activate', (e) => {
+                // Okamžitě převezme kontrolu nad všemi klienty (otevřenými okny)
+                e.waitUntil(self.clients.claim());
+            });
+
+            self.addEventListener('fetch', (e) => {
+                // Síť na prvním místě, ať se vždy stahuje nejnovější kód z internetu
+                e.respondWith(
+                    fetch(e.request).catch(() => {
+                        return caches.match(e.request);
+                    })
+                );
+            });
         `;
         const blob = new Blob([swCode], {type: 'application/javascript'});
         const swUrl = URL.createObjectURL(blob);
-        navigator.serviceWorker.register(swUrl).catch(err => console.error(err));
+        
+        navigator.serviceWorker.register(swUrl).then(reg => {
+            // Kontrola aktualizace na pozadí při každém spuštění
+            reg.update();
+
+            // Pokud se na pozadí nainstaloval nový Service Worker, okamžitě obnovíme stránku
+            reg.addEventListener('updatefound', () => {
+                const newWorker = reg.installing;
+                newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        console.log('Nalezena nová verze, aktualizuji aplikaci...');
+                        showStatus("Aktualizuji aplikaci na novou verzi...");
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    }
+                });
+            });
+        }).catch(err => console.error('Chyba registrace SW:', err));
     }
 </script>
 
