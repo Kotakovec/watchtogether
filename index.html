@@ -234,6 +234,7 @@ let soundOn = true;
 let watchId = null;
 let audioCtx = null;
 let beepInterval = null;
+let lastBeepState = 'ok';
 let wakeLock = null;
 
 const speedEl = document.getElementById('speed');
@@ -293,26 +294,76 @@ autoSwitch.onclick = ()=>{
 };
 
 async function fetchSpeedLimitNear(lat, lon){
-  // radius search, take nearest way with a maxspeed tag
-  const q = `[out:json][timeout:8];way(around:60,${lat},${lon})[highway][maxspeed];out tags center 5;`;
+  // nearest road of any kind within 40m — do NOT require maxspeed tag,
+  // since most Czech roads outside main routes don't have it set
+  const q = `[out:json][timeout:10];
+    way(around:40,${lat},${lon})[highway];
+    out tags center 5;`;
   const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(q);
   const res = await fetch(url);
   if(!res.ok) throw new Error('overpass ' + res.status);
   const data = await res.json();
   if(!data.elements || !data.elements.length) return null;
-  const el = data.elements[0];
-  let raw = el.tags.maxspeed;
-  let val = parseInt(raw);
-  if(isNaN(val)){
-    // handle things like "CZ:urban" (50) / "CZ:rural" (90) / "walk" etc.
-    if(/urban/i.test(raw)) val = 50;
-    else if(/rural/i.test(raw)) val = 90;
-    else if(/motorway/i.test(raw)) val = 130;
-    else if(/walk/i.test(raw)) val = 20;
-    else return null;
+
+  // prefer ways that actually have a maxspeed tag, otherwise take the first
+  const withTag = data.elements.find(e => e.tags && e.tags.maxspeed);
+  const el = withTag || data.elements[0];
+  const tags = el.tags || {};
+  const roadName = tags.name || tags.ref || (tags.highway ? czechHighwayLabel(tags.highway) : 'úsek bez názvu');
+
+  // 1) explicit maxspeed tag wins
+  if(tags.maxspeed){
+    let val = parseInt(tags.maxspeed);
+    if(!isNaN(val)) return { limit: val, name: roadName, source: 'tag' };
+    if(/urban/i.test(tags.maxspeed)) return { limit: 50, name: roadName, source: 'tag' };
+    if(/rural/i.test(tags.maxspeed)) return { limit: 90, name: roadName, source: 'tag' };
+    if(/motorway/i.test(tags.maxspeed)) return { limit: 130, name: roadName, source: 'tag' };
   }
-  const roadName = el.tags.name || el.tags.ref || 'úsek bez názvu';
-  return { limit: val, name: roadName };
+
+  // 2) infer from road class per Czech traffic law (zákon 361/2000 Sb.)
+  const hw = tags.highway;
+  if(hw === 'motorway' || hw === 'motorway_link') return { limit: 130, name: roadName, source: 'odhad' };
+  if(hw === 'trunk' || hw === 'trunk_link') return { limit: 110, name: roadName, source: 'odhad' };
+  if(hw === 'living_street') return { limit: 20, name: roadName, source: 'odhad' };
+  if(hw === 'residential' || hw === 'service' || hw === 'unclassified'){
+    return { limit: 50, name: roadName, source: 'odhad (v obci)' };
+  }
+  if(hw === 'primary' || hw === 'secondary' || hw === 'tertiary'){
+    // could be in or out of village — check for nearby settlement context
+    const urban = await isNearSettlement(lat, lon);
+    return { limit: urban ? 50 : 90, name: roadName, source: 'odhad' };
+  }
+
+  // unknown road class — fall back to conservative in-village default
+  return { limit: 50, name: roadName, source: 'odhad' };
+}
+
+function czechHighwayLabel(hw){
+  const map = {
+    motorway:'dálnice', trunk:'rychlostní silnice', primary:'silnice I. třídy',
+    secondary:'silnice II. třídy', tertiary:'silnice III. třídy',
+    residential:'místní komunikace', living_street:'obytná zóna', service:'účelová komunikace'
+  };
+  return map[hw] || 'silnice';
+}
+
+async function isNearSettlement(lat, lon){
+  try{
+    const q = `[out:json][timeout:8];
+      (
+        way(around:80,${lat},${lon})[landuse=residential];
+        way(around:80,${lat},${lon})[building];
+        node(around:80,${lat},${lon})[place];
+      );
+      out tags 3;`;
+    const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(q);
+    const res = await fetch(url);
+    if(!res.ok) return false;
+    const data = await res.json();
+    return !!(data.elements && data.elements.length);
+  }catch(e){
+    return false;
+  }
 }
 
 async function autoUpdateLimit(lat, lon){
@@ -324,7 +375,7 @@ async function autoUpdateLimit(lat, lon){
     const result = await fetchSpeedLimitNear(lat, lon);
     if(result){
       setLimit(result.limit);
-      autoInfo.textContent = 'ZDROJ: ' + result.name.toUpperCase() + ' (' + result.limit + ')';
+      autoInfo.textContent = 'ZDROJ: ' + result.name.toUpperCase() + ' — ' + result.source.toUpperCase() + ' (' + result.limit + ')';
     } else {
       autoInfo.textContent = 'ZDROJ: NEZNÁMÝ, PONECHÁVÁM ' + limit;
     }
@@ -397,27 +448,28 @@ function handlePosition(pos){
   speedEl.textContent = shown;
 
   const over = kmh - limit;
+  let newState = 'ok';
+  if(over >= 10) newState = 'over';
+  else if(over >= 2) newState = 'warn';
 
   ringEl.classList.remove('warn','over');
-  if(over > 8){
+  if(newState === 'over'){
     ringEl.classList.add('over');
     stateEchoEl.textContent = 'PŘEKROČENO';
     if(soundOn){
-      // faster beeping the more you're over, like the BMW belt chime ramping up
-      const interval = Math.max(180, 500 - over*8);
-      if(!beepInterval) startBeep(interval);
-      else { stopBeep(); startBeep(interval); }
-    }
-  } else if(over > 0){
+      if(lastBeepState !== 'over') startBeep(160);
+    } else stopBeep();
+  } else if(newState === 'warn'){
     ringEl.classList.add('warn');
     stateEchoEl.textContent = 'POZOR';
     if(soundOn){
-      if(!beepInterval) startBeep(700);
+      if(lastBeepState !== 'warn') startBeep(750);
     } else stopBeep();
   } else {
     stateEchoEl.textContent = 'OK';
     stopBeep();
   }
+  lastBeepState = newState;
 }
 
 function handleError(err){
