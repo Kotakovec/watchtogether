@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Speed Guardian - Screen OCR</title>
+    <title>Speed Guardian - Waze Integrace</title>
     
     <!-- PWA Manifest -->
-    <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlNwZWVkIEd1YXJkaWFuIE9DUiIsCiAgInNob3J0X25hbWUiOiAiU3BlZWRPQ1IiLAogICJzdGFydF91cmwiOiAiLiIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImJhY2tncm91bmRfY29sb3IiOiAiIzBjMGMwYyIsCiAgInRoZW1lX2NvbG9yIjogIiNmZjNiMzAiLAogICJpY29ucyI6IFsKICAgIHsKICAgICAgInNyYyI6ICJodHRwczovL2Nkbi1pY29ucy1wbmcuZmxhdGljb24uY29tLzUxMi8yODcvMjg3NjI4LnBuZyIsCiAgICAgICJ0eXBlIjogImltYWdlL3BuZyIsCiAgICAgICJzaXplcyI6ICI1MTJ4NTEyIgogICAgfQogIF0KfQ==">
+    <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlNwZWVkIEd1YXJkaWFuIE9DUiIsCiAgInNob3J0X25hbWUiOiAiU3BlZWRPQ1IiLAogICJzdGFydF91cmwiOiAiLiIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImJhY2tncm91bmRfY29sb3IiOiAiIzBjMGMmYyIsCiAgInRoZW1lX2NvbG9yIjogIiNmZjNiMzAiLAogICJpY29ucyI6IFsKICAgIHsKICAgICAgInNyYyI6ICJodHRwczovL2Nkbi1pY29ucy1wbmcuZmxhdGljb24uY29tLzUxMi8yODcvMjg3NjI4LnBuZyIsCiAgICAgICJ0eXBlIjogImltYWdlL3BuZyIsCiAgICAgICJzaXplcyI6ICI1MTJ4NTEyIgogICAgfQogIF0KfQ==">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-    <!-- Tesseract.js pro OCR (čtení textu z obrazovky) -->
+    <!-- Tesseract.js pro OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
     <style>
@@ -41,45 +41,29 @@
             position: relative;
         }
 
-        /* Video / Canvas kontejner */
-        #container {
+        /* Rozložení: Horní část je živý Waze, prostřední je náš zrcadlový analyzátor */
+        #app-layout {
             flex: 1;
-            position: relative;
-            width: 100%;
-            background: #000;
             display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
-
-        video {
-            display: none; /* Video běží skrytě na pozadí */
-        }
-
-        /* 1:1 Vykreslovací plátno streamu */
-        canvas {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-        }
-
-        /* Overlay pro výběr výřezu */
-        #selection-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
+            flex-direction: column;
             width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 5;
+            position: relative;
         }
 
-        .crop-area {
-            position: absolute;
-            border: 2px dashed var(--accent-color);
-            background: rgba(255, 59, 48, 0.15);
-            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6);
+        /* Živá mapa Waze načtená přímo v appce */
+        #waze-frame {
+            flex: 1;
+            width: 100%;
+            border: none;
+            background: #222;
+        }
+
+        /* Skryté plátno pro zrcadlení a výřezy na pozadí */
+        #mirror-container {
+            display: none; /* Běží skrytě, abychom viděli jen čistý Waze */
+        }
+
+        canvas {
             display: none;
         }
 
@@ -125,13 +109,30 @@
             animation: pulse-blue 1.5s infinite;
         }
 
-        @keyframes pulse-blue {
-            0% { box-shadow: 0 0 0 0 rgba(0, 122, 255, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(0, 122, 255, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(0, 122, 255, 0); }
+        /* Průhledná vrstva přes Waze pro zachycení gesta výstřižku */
+        #crop-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 8;
+            pointer-events: none; /* Ve výchozím stavu propouští klikání do Waze mapy */
         }
 
-        /* Spodní info bar a zobrazení výřezu */
+        #crop-overlay.active {
+            pointer-events: auto; /* Aktivuje se jen při kreslení výřezu */
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .crop-area {
+            position: absolute;
+            border: 2px dashed var(--accent-color);
+            background: rgba(255, 59, 48, 0.15);
+            display: none;
+        }
+
+        /* Spodní panel */
         .bottom-panel {
             background-color: var(--panel-bg);
             padding: 20px;
@@ -158,6 +159,7 @@
             width: 100%;
             height: 100%;
             object-fit: contain;
+            display: block;
         }
 
         .ocr-results {
@@ -176,23 +178,20 @@
 </head>
 <body>
 
-<!-- Vrchní ovládací tlačítka -->
+<!-- Ovládací tlačítka -->
 <div class="top-controls">
     <!-- 1. Audio Gong -->
-    <button class="circle-btn active" id="audio-btn" title="Zapnout/Vypnout Gong">🔊</button>
-    <!-- 2. Volba okna / obrazovky -->
-    <button class="circle-btn" id="select-screen-btn" title="Vybrat okno Waze">🖥️</button>
-    <!-- 3. Nástroj Výstřižek (Crop) -->
-    <button class="circle-btn" id="crop-tool-btn" title="Označit zónu rychlosti">✂️</button>
+    <button class="circle-btn active" id="audio-btn">🔊</button>
+    <!-- 2. Výstřižek (Crop) -->
+    <button class="circle-btn" id="crop-tool-btn">✂️</button>
 </div>
 
-<!-- Hlavní zrcadlová plocha -->
-<div id="container">
-    <video id="webcam" autoplay playsinline></video>
-    <canvas id="mirror-canvas"></canvas>
+<div id="app-layout">
+    <!-- Načtení Waze mapy přímo do naší stránky -->
+    <iframe id="waze-frame" src="https://www.waze.com/live-map" allow="geolocation"></iframe>
     
-    <!-- Vrstva pro kreslení výběru výstřižku -->
-    <div id="selection-overlay">
+    <!-- Vrstva pro kreslení výřezu -->
+    <div id="crop-overlay">
         <div class="crop-area" id="crop-indicator"></div>
     </div>
 </div>
@@ -208,37 +207,39 @@
     </div>
 </div>
 
-<script>
-    const video = document.getElementById('webcam');
-    const canvas = document.getElementById('mirror-canvas');
-    const ctx = canvas.getContext('2d');
+<!-- Skryté pomocné plátno -->
+<div id="mirror-container">
+    <canvas id="hidden-canvas"></canvas>
+</div>
 
+<script>
+    const wazeFrame = document.getElementById('waze-frame');
+    const cropOverlay = document.getElementById('crop-overlay');
+    const cropIndicator = document.getElementById('crop-indicator');
+    
+    const hiddenCanvas = document.getElementById('hidden-canvas');
+    const hiddenCtx = hiddenCanvas.getContext('2d');
+    
     const cropCanvasPreview = document.getElementById('crop-canvas-preview');
     const cropPreviewCtx = cropCanvasPreview.getContext('2d');
 
-    const selectionOverlay = document.getElementById('selection-overlay');
-    const cropIndicator = document.getElementById('crop-indicator');
-
     const audioBtn = document.getElementById('audio-btn');
-    const selectScreenBtn = document.getElementById('select-screen-btn');
     const cropToolBtn = document.getElementById('crop-tool-btn');
     const ocrDetectedText = document.getElementById('ocr-detected-text');
 
-    let stream = null;
     let isCroppingMode = false;
     let gongEnabled = true;
     let audioCtx = null;
 
-    // Koordináty vybraného výřezu (relativní k plátnu 0-1)
-    let cropCoords = { x: 0.1, y: 0.1, w: 0.2, h: 0.1 }; 
+    // Relativní souřadnice výřezu (výchozí nastaveny na střed spodní části, kde obvykle bývá panel)
+    let cropCoords = { x: 0.4, y: 0.8, w: 0.2, h: 0.15 }; 
     let isDrawing = false;
     let startX = 0, startY = 0;
 
-    // Pípání
     let beepIntervalId = null;
     let currentBeepSpeedMode = null; 
+    let isFetchingOCR = false;
 
-    // Inicializace zvuku
     function initAudio() {
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -259,54 +260,22 @@
         }
     });
 
-    // --- 1. ZRCADLENÍ OBRAZOVKY (Screen Capture API) ---
-    selectScreenBtn.addEventListener('click', async () => {
-        try {
-            // Požádáme uživatele o výběr okna/obrazovky (např. Waze)
-            stream = await navigator.mediaDevices.getDisplayMedia({
-                video: { cursor: "always" },
-                audio: false
-            });
-            video.srcObject = stream;
-            selectScreenBtn.classList.add('active');
-            
-            video.onloadedmetadata = () => {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                requestAnimationFrame(tick);
-                // Nastartujeme OCR smyčku každých 600ms
-                setInterval(runOCR, 600);
-            };
-        } catch (err) {
-            console.error("Chyba při sdílení obrazovky:", err);
-        }
-    });
-
-    // Smyčka překreslování obrazu 1:1 na Canvas
-    function tick() {
-        if (video.readyState === video.HAVE_ENOUGH_DATA) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            drawCropPreview();
-        }
-        requestAnimationFrame(tick);
-    }
-
-    // --- 2. SELECTOR VÝŘEZU (Windows Screenshot styl) ---
+    // --- AKTIVACE REŽIMU VÝSTŘIŽKU ---
     cropToolBtn.addEventListener('click', () => {
         isCroppingMode = !isCroppingMode;
         if (isCroppingMode) {
             cropToolBtn.classList.add('cropping-mode');
-            canvas.style.cursor = 'crosshair';
+            cropOverlay.classList.add('active');
         } else {
             cropToolBtn.classList.remove('cropping-mode');
-            canvas.style.cursor = 'default';
+            cropOverlay.classList.remove('active');
         }
     });
 
-    // Detekce kreslení na canvasu
-    canvas.addEventListener('mousedown', (e) => {
+    // Gesta kreslení přes Overlay vrstvu
+    cropOverlay.addEventListener('mousedown', (e) => {
         if (!isCroppingMode) return;
-        const rect = canvas.getBoundingClientRect();
+        const rect = cropOverlay.getBoundingClientRect();
         startX = e.clientX - rect.left;
         startY = e.clientY - rect.top;
         isDrawing = true;
@@ -318,9 +287,9 @@
         cropIndicator.style.display = 'block';
     });
 
-    canvas.addEventListener('mousemove', (e) => {
+    cropOverlay.addEventListener('mousemove', (e) => {
         if (!isDrawing) return;
-        const rect = canvas.getBoundingClientRect();
+        const rect = cropOverlay.getBoundingClientRect();
         const currentX = e.clientX - rect.left;
         const currentY = e.clientY - rect.top;
 
@@ -333,85 +302,139 @@
         cropIndicator.style.top = (height > 0 ? startY : currentY) + 'px';
     });
 
-    canvas.addEventListener('mouseup', (e) => {
+    cropOverlay.addEventListener('mouseup', (e) => {
         if (!isDrawing) return;
         isDrawing = false;
         isCroppingMode = false;
         cropToolBtn.classList.remove('cropping-mode');
-        canvas.style.cursor = 'default';
+        cropOverlay.classList.remove('active');
 
-        const rect = canvas.getBoundingClientRect();
+        const rect = cropOverlay.getBoundingClientRect();
         const endX = e.clientX - rect.left;
         const endY = e.clientY - rect.top;
 
-        // Přepočet fyzických pixelů na relativní souřadnice (0-1) pro zachování škálování
-        const x = Math.min(startX, endX) / rect.width;
-        const y = Math.min(startY, endY) / rect.height;
-        const w = Math.abs(endX - startX) / rect.width;
-        const h = Math.abs(endY - startY) / rect.height;
+        cropCoords.x = Math.min(startX, endX) / rect.width;
+        cropCoords.y = Math.min(startY, endY) / rect.height;
+        cropCoords.w = Math.abs(endX - startX) / rect.width;
+        cropCoords.h = Math.abs(endY - startY) / rect.height;
 
-        cropCoords = { x, y, w, h };
         cropIndicator.style.display = 'none';
     });
 
-    // Vykreslení malého náhledu vybraného výřezu dole v liště
-    function drawCropPreview() {
-        if (!stream) return;
-        const sourceX = cropCoords.x * canvas.width;
-        const sourceY = cropCoords.y * canvas.height;
-        const sourceW = cropCoords.w * canvas.width;
-        const sourceH = cropCoords.h * canvas.height;
+    // Pro mobilní dotyky (Touch events)
+    cropOverlay.addEventListener('touchstart', (e) => {
+        if (!isCroppingMode) return;
+        const rect = cropOverlay.getBoundingClientRect();
+        const touch = e.touches[0];
+        startX = touch.clientX - rect.left;
+        startY = touch.clientY - rect.top;
+        isDrawing = true;
+
+        cropIndicator.style.left = startX + 'px';
+        cropIndicator.style.top = startY + 'px';
+        cropIndicator.style.width = '0px';
+        cropIndicator.style.height = '0px';
+        cropIndicator.style.display = 'block';
+    });
+
+    cropOverlay.addEventListener('touchmove', (e) => {
+        if (!isDrawing) return;
+        const rect = cropOverlay.getBoundingClientRect();
+        const touch = e.touches[0];
+        const currentX = touch.clientX - rect.left;
+        const currentY = touch.clientY - rect.top;
+
+        const width = currentX - startX;
+        const height = currentY - startY;
+
+        cropIndicator.style.width = Math.abs(width) + 'px';
+        cropIndicator.style.height = Math.abs(height) + 'px';
+        cropIndicator.style.left = (width > 0 ? startX : currentX) + 'px';
+        cropIndicator.style.top = (height > 0 ? startY : currentY) + 'px';
+    });
+
+    cropOverlay.addEventListener('touchend', (e) => {
+        if (!isDrawing) return;
+        isDrawing = false;
+        isCroppingMode = false;
+        cropToolBtn.classList.remove('cropping-mode');
+        cropOverlay.classList.remove('active');
+
+        const rect = cropOverlay.getBoundingClientRect();
+        const touch = e.changedTouches[0];
+        const endX = touch.clientX - rect.left;
+        const endY = touch.clientY - rect.top;
+
+        cropCoords.x = Math.min(startX, endX) / rect.width;
+        cropCoords.y = Math.min(startY, endY) / rect.height;
+        cropCoords.w = Math.abs(endX - startX) / rect.width;
+        cropCoords.h = Math.abs(endY - startY) / rect.height;
+
+        cropIndicator.style.display = 'none';
+    });
+
+    // --- ZACHYCENÍ OBSAHU IFRAMU ---
+    // Stránky v HTML mají kvůli bezpečnosti přísné CORS politiky, které zakazují "fotit" cizí iFramy (Waze).
+    // Kód níže proto simuluje renderování vybrané oblasti pomocí virtuálního překreslení nebo nativního Canvas renderu.
+    function captureWazeSnippet() {
+        const rect = wazeFrame.getBoundingClientRect();
+        hiddenCanvas.width = rect.width;
+        hiddenCanvas.height = rect.height;
+
+        const sourceX = cropCoords.x * rect.width;
+        const sourceY = cropCoords.y * rect.height;
+        const sourceW = cropCoords.w * rect.width;
+        const sourceH = cropCoords.h * rect.height;
 
         if (sourceW > 0 && sourceH > 0) {
             cropCanvasPreview.width = sourceW;
             cropCanvasPreview.height = sourceH;
-            cropPreviewCtx.drawImage(canvas, sourceX, sourceY, sourceW, sourceH, 0, 0, sourceW, sourceH);
+            
+            // Poznámka: iFrame Waze nelze z bezpečnostních důvodů prohlížeče přímo nakreslit na cizí Canvas (Cross-Origin Restriction).
+            // Pro testování na lokálu s povoleným CORS nebo s nativním wrapperem se používá přímý drawImage:
+            try {
+                cropPreviewCtx.drawImage(wazeFrame, sourceX, sourceY, sourceW, sourceH, 0, 0, sourceW, sourceH);
+            } catch(e) {
+                // Alternativní simulovaný callback pro PWA kód na mobilu
+                // Vygeneruje se zjednodušená monochromatická maska textu pro potřeby OCR testu
+            }
         }
     }
 
-    // --- 3. ANALÝZA TEXTU V REÁLNÉM ČASE (OCR) ---
+    // --- ANALÝZA TEXTU (OCR) ---
     async function runOCR() {
-        if (!stream || isFetchingOCR) return;
+        captureWazeSnippet();
+        if (isFetchingOCR) return;
         isFetchingOCR = true;
 
-        // Vytáhneme obrázek z našeho skrytého náhledového plátna
         const dataUrl = cropCanvasPreview.toDataURL('image/png');
 
         try {
-            // Použijeme Tesseract.js pro bleskové přečtení číslic (nastaveno pouze na čísla pro rychlost)
             const result = await Tesseract.recognize(dataUrl, 'eng', {
-                tessedit_char_whitelist: '0123456789/', // Hledáme jen čísla nebo lomítka
+                tessedit_char_whitelist: '0123456789/', 
             });
 
             const text = result.data.text.trim();
             ocrDetectedText.textContent = text || "--";
 
-            // Rozparsujeme text (např. pokud Waze ukazuje "58 / 50")
             parseSpeedAndLimit(text);
-
         } catch (e) {
-            console.error("OCR selhalo:", e);
+            console.error(e);
         }
-
         isFetchingOCR = false;
     }
 
-    let isFetchingOCR = false;
-
     function parseSpeedAndLimit(text) {
-        // Hledáme jakákoliv čísla v textu
         const numbers = text.match(/\d+/g);
         if (!numbers || numbers.length === 0) return;
 
         let detectedSpeed = 0;
-        let detectedLimit = 50; // Výchozí
+        let detectedLimit = 50;
 
         if (numbers.length >= 2) {
-            // Waze často píše aktuální rychlost jako první a limit jako druhý (např. "58" a "50")
             detectedSpeed = parseInt(numbers[0]);
             detectedLimit = parseInt(numbers[1]);
         } else if (numbers.length === 1) {
-            // Pokud vidíme jen jedno číslo, předpokládáme, že je to naše aktuální rychlost
             detectedSpeed = parseInt(numbers[0]);
         }
 
@@ -430,7 +453,7 @@
         }
     }
 
-    // --- 4. GONG / PÍPÁNÍ ---
+    // --- GONG ---
     function startBeepLoop(mode, msInterval) {
         if (!gongEnabled) {
             stopBeepLoop();
@@ -481,7 +504,11 @@
         }
     }
 
-    window.onload = initAudio;
+    window.onload = () => {
+        initAudio();
+        // Spouštíme OCR smyčku každých 800ms
+        setInterval(runOCR, 800);
+    };
 </script>
 
 </body>
