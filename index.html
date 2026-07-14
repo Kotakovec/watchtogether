@@ -3,29 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Speed Guardian Pro</title>
+    <title>Speed Guardian Pro - BMW Edition</title>
     <!-- Leaflet.js pro mapu -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlNwZWVkIEd1YXJkaWFuIiwKICAic2hvcnRfbmFtZSI6ICJTcGVlZEd1YXJkIiwKICAic3RhcnRfdXJsIjogIi4iLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMxYTFhMWEiLAogICJ0aGVtZV9jb2xvciI6ICIjZmYzYjMwIiwKICAiaWNvbnMiOiBbCiAgICB7CiAgICAgICJzcmMiOiAiaHR0cHM6Ly9jZG4taWNvbnMtcG5nLmZsYXRpY29uLmNvbS81MTIvMjg3LzI4NzYyOC5wbmciLAogICAgICAidHlwZSI6ICJpbWFnZS9wbmciLAogICAgICAic2l6ZXMiOiAiNTEyeDUxMiIKICAgIH0KICBdCn0=">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
     <style>
-        :root { --bg: #121212; --card: #1e1e1e; --accent: #ff3b30; }
-        body { margin: 0; font-family: sans-serif; background: var(--bg); color: white; height: 100vh; display: flex; flex-direction: column; }
+        :root {
+            --bg-color: #0c0c0c;
+            --card-bg: #161616;
+            --text-color: #ffffff;
+            --accent-color: #ff3b30;
+            --success-color: #30d158;
+            --blue-color: #0a84ff;
+        }
+
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-color);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
         
-        #map { flex: 1; min-height: 300px; width: 100%; }
+        #map {
+            flex: 1;
+            width: 100%;
+        }
         
         .ui-panel {
-            background: var(--card);
-            padding: 20px;
+            background: var(--card-bg);
+            padding: 15px 20px;
             display: flex;
             align-items: center;
             justify-content: space-around;
-            border-top-left-radius: 20px;
-            border-top-right-radius: 20px;
+            border-top: 2px solid #222;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.5);
+            z-index: 1000;
         }
 
-        /* Značka rychlosti */
+        /* Dopravní značka */
         .speed-sign {
-            width: 80px; height: 80px;
+            width: 75px;
+            height: 75px;
             border: 8px solid #ff3b30;
             border-radius: 50%;
             background: white;
@@ -33,102 +60,340 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 32px;
-            font-weight: bold;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            font-size: 28px;
+            font-weight: 900;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+            flex-shrink: 0;
         }
 
-        .controls { text-align: center; }
-        .speed-current { font-size: 48px; font-weight: bold; }
+        .speed-info {
+            text-align: center;
+            min-width: 80px;
+        }
+
+        .speed-current {
+            font-size: 54px;
+            font-weight: 900;
+            line-height: 1;
+            letter-spacing: -2px;
+        }
         
-        button {
-            padding: 10px 20px;
+        .speed-unit {
+            font-size: 14px;
+            color: #666;
+            text-transform: uppercase;
+            font-weight: bold;
+            margin-top: 2px;
+        }
+
+        /* Tlačítko pro zvuk */
+        #audio-btn {
+            padding: 12px 24px;
             border-radius: 50px;
             border: none;
-            background: #333;
-            color: white;
+            background: #2a2a2a;
+            color: #888;
             font-weight: bold;
+            font-size: 15px;
             cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
-        button.active { background: #30d158; }
+
+        #audio-btn.active {
+            background: var(--success-color);
+            color: white;
+            box-shadow: 0 4px 12px rgba(48, 209, 88, 0.3);
+        }
+
+        /* Status panel */
+        .map-overlay {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(22, 22, 22, 0.85);
+            backdrop-filter: blur(10px);
+            padding: 8px 15px;
+            border-radius: 30px;
+            font-size: 11px;
+            color: #ccc;
+            z-index: 1000;
+            pointer-events: none;
+            border: 1px solid #333;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body>
 
+<div class="map-overlay" id="status-overlay">
+    Inicializuji GPS a stahuji okolí...
+</div>
+
 <div id="map"></div>
 
 <div class="ui-panel">
+    <!-- Dopravní značka s rychlostním limitem -->
     <div class="speed-sign" id="sign">--</div>
     
-    <div class="controls">
+    <!-- Aktuální rychlost -->
+    <div class="speed-info">
         <div class="speed-current" id="speed">0</div>
-        <div style="color: #888;">km/h</div>
+        <div class="speed-unit">km/h</div>
     </div>
 
-    <button id="speech-btn" class="active">Hlas: ZAP</button>
+    <!-- Vypínač BMW gongu -->
+    <button id="audio-btn" class="active">Gong: ZAP</button>
 </div>
 
 <script>
-    let map, marker;
-    let speechEnabled = true;
-    let currentLimit = 50;
+    let map, marker, accuracyCircle;
+    let audioEnabled = true;
+    let currentLimit = 50; 
+    let lastSpokenTime = 0;
+    const alertDelay = 3500; // Jak často má gong zaznít, pokud stále překračuješ rychlost
+
     let localRoadsDatabase = [];
+    let lastFetchedArea = null;
+
+    const speedElement = document.getElementById('speed');
+    const signElement = document.getElementById('sign');
+    const audioBtn = document.getElementById('audio-btn');
+    const statusOverlay = document.getElementById('status-overlay');
+
+    // Inicializace audio kontextu
+    let audioCtx = null;
+
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    }
+
+    // Funkce simulující BMW Gong přes Web Audio API
+    function playBmwGong() {
+        initAudio();
+        if (!audioCtx) return;
+
+        // Pokud je kontext uspaný (prohlížeče vyžadují první interakci), probudíme ho
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+
+        const now = audioCtx.currentTime;
+
+        // BMW gong je tvořen dvěma hlavními tóny (kolem 660 Hz - E5 a mírně rozladěným druhým tónem)
+        const osc1 = audioCtx.createOscillator();
+        const osc2 = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        // Nastavení frekvencí
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(659.25, now); // E5 tón
+
+        osc2.type = 'triangle'; // Trojúhelník dodá ten lehce kovový/jemný akustický tón
+        osc2.frequency.setValueAtTime(661.00, now); // Mírný detune pro bohatší zvuk
+
+        // Obálka hlasitosti (rychlý náběh a pomalé doznívání jako u skutečného zvonku)
+        gainNode.gain.setValueAtTime(0, now);
+        gainNode.gain.linearRampToValueAtTime(0.5, now + 0.05); // Rychlý náběh (attack)
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1.8); // Dlouhý dozvuk (decay)
+
+        // Propojení
+        osc1.connect(gainNode);
+        osc2.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        // Spuštění a zastavení
+        osc1.start(now);
+        osc2.start(now);
+        
+        osc1.stop(now + 1.8);
+        osc2.stop(now + 1.8);
+    }
 
     // Inicializace mapy
     function initMap() {
-        map = L.map('map', { zoomControl: false }).setView([49.444, 16.333], 15);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        marker = L.marker([49.444, 16.333]).addTo(map);
+        map = L.map('map', { 
+            zoomControl: false,
+            attributionControl: false 
+        }).setView([49.195, 16.608], 16); // Brno střed default
+        
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19
+        }).addTo(map);
+
+        marker = L.marker([49.195, 16.608]).addTo(map);
+        accuracyCircle = L.circle([49.195, 16.608], {
+            radius: 10,
+            fillColor: '#0a84ff',
+            fillOpacity: 0.15,
+            color: '#0a84ff',
+            weight: 1
+        }).addTo(map);
     }
 
-    // Tlačítko hlasu
-    document.getElementById('speech-btn').addEventListener('click', (e) => {
-        speechEnabled = !speechEnabled;
-        e.target.textContent = speechEnabled ? "Hlas: ZAP" : "Hlas: VYP";
-        e.target.className = speechEnabled ? "active" : "";
+    // Tlačítko pro zapnutí/vypnutí zvuku
+    audioBtn.addEventListener('click', () => {
+        audioEnabled = !audioEnabled;
+        if (audioEnabled) {
+            audioBtn.textContent = "Gong: ZAP";
+            audioBtn.classList.add('active');
+            playBmwGong(); // Zkušební přehrání při zapnutí
+        } else {
+            audioBtn.textContent = "Gong: VYP";
+            audioBtn.classList.remove('active');
+        }
     });
 
-    // Sledování polohy
-    navigator.geolocation.watchPosition((pos) => {
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
-        const spd = Math.round((pos.coords.speed || 0) * 3.6);
+    // Start GPS
+    if ("geolocation" in navigator) {
+        navigator.geolocation.watchPosition(onSuccess, onError, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        });
+    } else {
+        statusOverlay.textContent = "Chyba: GPS není podporováno!";
+    }
 
-        // Update mapy
-        marker.setLatLng([lat, lon]);
-        map.panTo([lat, lon]);
+    async function onSuccess(position) {
+        const coords = position.coords;
+        const lat = coords.latitude;
+        const lon = coords.longitude;
+        
+        let speedKMH = Math.round((coords.speed || 0) * 3.6);
+        if (speedKMH < 0) speedKMH = 0;
 
-        // Update rychlosti
-        document.getElementById('speed').textContent = spd;
+        const newLatLng = new L.LatLng(lat, lon);
+        marker.setLatLng(newLatLng);
+        accuracyCircle.setLatLng(newLatLng);
+        accuracyCircle.setRadius(coords.accuracy);
+        map.panTo(newLatLng);
 
-        // Bleskové hledání limitu (viz předchozí kód)
-        const matched = findLimitInLocalDatabase(lat, lon);
-        if (matched) {
-            currentLimit = matched;
-            document.getElementById('sign').textContent = currentLimit;
+        speedElement.textContent = speedKMH;
+
+        triggerBackgroundPrefetch(lat, lon);
+
+        const matchedLimit = findLimitInLocalDatabase(lat, lon);
+        
+        if (matchedLimit !== null) {
+            currentLimit = matchedLimit;
+            signElement.textContent = currentLimit;
+        } else {
+            signElement.textContent = "--";
         }
 
-        // Kontrola
-        if (spd > currentLimit + 2 && speechEnabled) {
+        // Kontrola překročení rychlosti o víc než 2 km/h
+        if (speedKMH >= (currentLimit + 2) && currentLimit > 0) {
             triggerAlert();
         }
-    }, null, { enableHighAccuracy: true });
+    }
 
-    // Zjednodušená verze vyhledávání (pro rychlost)
+    function onError(error) {
+        console.error(error);
+        statusOverlay.textContent = "Chyba GPS: " + error.message;
+    }
+
     function findLimitInLocalDatabase(lat, lon) {
-        // Tady se volá logika z předchozího kroku (stahování z OSM)
-        // ... (ponechána stejná logika jako v minulé verzi)
-        return currentLimit; 
+        if (localRoadsDatabase.length === 0) return null;
+
+        let closestRoad = null;
+        let minDistance = 30; 
+
+        for (const road of localRoadsDatabase) {
+            const dist = getDistance(lat, lon, road.lat, road.lon);
+            if (dist < minDistance) {
+                minDistance = dist;
+                closestRoad = road;
+            }
+        }
+
+        return closestRoad ? closestRoad.limit : null;
+    }
+
+    async function triggerBackgroundPrefetch(lat, lon) {
+        if (!lastFetchedArea || getDistance(lastFetchedArea.lat, lastFetchedArea.lon, lat, lon) > 400) {
+            lastFetchedArea = { lat, lon };
+            statusOverlay.textContent = "Aktualizuji rychlostní mapu okolí...";
+
+            const radius = 1000; 
+            const query = `[out:json];way(around:${radius},${lat},${lon})["maxspeed"];out tags center;`;
+            const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Chyba API");
+                const data = await response.json();
+
+                if (data.elements) {
+                    const newRoads = data.elements.map(el => {
+                        let rawLimit = el.tags.maxspeed;
+                        let limitNum = 50; 
+
+                        if (rawLimit === "urban" || rawLimit.includes("urban")) limitNum = 50;
+                        else if (rawLimit === "rural" || rawLimit.includes("rural")) limitNum = 90;
+                        else if (rawLimit === "motorway" || rawLimit.includes("motorway")) limitNum = 130;
+                        else {
+                            const parsed = parseInt(rawLimit);
+                            if (!isNaN(parsed)) limitNum = parsed;
+                        }
+
+                        return {
+                            lat: el.center.lat,
+                            lon: el.center.lon,
+                            limit: limitNum
+                        };
+                    });
+
+                    localRoadsDatabase = [...localRoadsDatabase, ...newRoads].filter(
+                        (road, index, self) =>
+                            index === self.findIndex((r) => r.lat === road.lat && r.lon === road.lon)
+                    );
+
+                    statusOverlay.textContent = `Aktivní (Načteno ${localRoadsDatabase.length} úseků)`;
+                }
+            } catch (e) {
+                console.warn("Chyba stahování mapových dat:", e);
+                statusOverlay.textContent = "Chyba stahování limitů (zkusím znovu za chvíli)";
+            }
+        }
+    }
+
+    function getDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371000;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
     }
 
     function triggerAlert() {
-        if (!window.speechSynthesis.speaking) {
-            const u = new SpeechSynthesisUtterance("Slow down");
-            window.speechSynthesis.speak(u);
+        const now = Date.now();
+        if (audioEnabled && (now - lastSpokenTime > alertDelay)) {
+            playBmwGong();
+            lastSpokenTime = now;
         }
     }
 
     initMap();
+
+    // Service Worker
+    if ('serviceWorker' in navigator) {
+        const swCode = `
+            self.addEventListener('install', (e) => self.skipWaiting());
+            self.addEventListener('fetch', (e) => {});
+        `;
+        const blob = new Blob([swCode], {type: 'application/javascript'});
+        const swUrl = URL.createObjectURL(blob);
+        navigator.serviceWorker.register(swUrl).catch(err => console.error(err));
+    }
 </script>
 
 </body>
