@@ -175,7 +175,7 @@
 <script>
     let map, userMarker, accuracyCircle;
     let gongEnabled = true;
-    let currentLimit = 50; 
+    let currentLimit = 50; // Výchozí limit při spuštění aplikace
     let currentSpeed = 0;
 
     // Pole pro uchování projeté trasy
@@ -300,19 +300,7 @@
             corePolyline.setLatLngs(routeHistory);
         }
 
-        // Fallback limity podle rychlosti
-        if (currentSpeed > 95 && currentLimit < 90) {
-            currentLimit = 130;
-            limitSignElement.textContent = currentLimit;
-        } else if (currentSpeed > 55 && currentSpeed <= 95 && currentLimit === 50) {
-            currentLimit = 90;
-            limitSignElement.textContent = currentLimit;
-        } else if (currentSpeed <= 40 && currentLimit > 50) {
-            currentLimit = 50;
-            limitSignElement.textContent = currentLimit;
-        }
-
-        // Dotaz na aktuální limit
+        // Dotaz na aktuální limit z mapy (řeší automaticky 30, 50, 80, 100, 130...)
         fetchCurrentRoadLimitOnline(lat, lon);
 
         // Pípání
@@ -482,22 +470,18 @@
 
     // --- AKTUALIZAČNÍ LOGIKA PRO PWA (BEZ MAZÁNÍ IKONY) ---
     if ('serviceWorker' in navigator) {
-        // Vygenerování aktualizačního Service Workeru jako Blob
         const swCode = `
             const CACHE_NAME = 'speed-guardian-v1';
             
             self.addEventListener('install', (e) => {
-                // Přeskočí čekání na zavření všech záložek a ihned se aktivuje
                 self.skipWaiting();
             });
 
             self.addEventListener('activate', (e) => {
-                // Okamžitě převezme kontrolu nad všemi klienty (otevřenými okny)
                 e.waitUntil(self.clients.claim());
             });
 
             self.addEventListener('fetch', (e) => {
-                // Síť na prvním místě, ať se vždy stahuje nejnovější kód z internetu
                 e.respondWith(
                     fetch(e.request).catch(() => {
                         return caches.match(e.request);
@@ -509,10 +493,8 @@
         const swUrl = URL.createObjectURL(blob);
         
         navigator.serviceWorker.register(swUrl).then(reg => {
-            // Kontrola aktualizace na pozadí při každém spuštění
             reg.update();
 
-            // Pokud se na pozadí nainstaloval nový Service Worker, okamžitě obnovíme stránku
             reg.addEventListener('updatefound', () => {
                 const newWorker = reg.installing;
                 newWorker.addEventListener('statechange', () => {
