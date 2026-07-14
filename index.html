@@ -201,6 +201,7 @@
     <div class="switch" id="autoSwitch"></div>
   </div>
   <div id="autoInfo" style="display:none; font-size:10px; letter-spacing:1px; color:var(--dim); margin-top:8px; text-align:right;">ZDROJ: --</div>
+  <div id="zoneInfo" style="display:none; font-size:11px; letter-spacing:2px; color:var(--amber); margin-top:6px; text-align:right; font-family:'Orbitron',sans-serif; font-weight:700;">--</div>
 </div>
 
 <script>
@@ -310,32 +311,44 @@ async function fetchSpeedLimitNear(lat, lon){
   const el = withTag || data.elements[0];
   const tags = el.tags || {};
   const roadName = tags.name || tags.ref || (tags.highway ? czechHighwayLabel(tags.highway) : 'úsek bez názvu');
-
-  // 1) explicit maxspeed tag wins
-  if(tags.maxspeed){
-    let val = parseInt(tags.maxspeed);
-    if(!isNaN(val)) return { limit: val, name: roadName, source: 'tag' };
-    if(/urban/i.test(tags.maxspeed)) return { limit: 50, name: roadName, source: 'tag' };
-    if(/rural/i.test(tags.maxspeed)) return { limit: 90, name: roadName, source: 'tag' };
-    if(/motorway/i.test(tags.maxspeed)) return { limit: 130, name: roadName, source: 'tag' };
-  }
-
-  // 2) infer from road class per Czech traffic law (zákon 361/2000 Sb.)
   const hw = tags.highway;
-  if(hw === 'motorway' || hw === 'motorway_link') return { limit: 130, name: roadName, source: 'odhad' };
-  if(hw === 'trunk' || hw === 'trunk_link') return { limit: 110, name: roadName, source: 'odhad' };
-  if(hw === 'living_street') return { limit: 20, name: roadName, source: 'odhad' };
-  if(hw === 'residential' || hw === 'service' || hw === 'unclassified'){
-    return { limit: 50, name: roadName, source: 'odhad (v obci)' };
-  }
-  if(hw === 'primary' || hw === 'secondary' || hw === 'tertiary'){
-    // could be in or out of village — check for nearby settlement context
-    const urban = await isNearSettlement(lat, lon);
-    return { limit: urban ? 50 : 90, name: roadName, source: 'odhad' };
+
+  // ---- 1) determine ZONE first (this is what drives both label + fallback limit) ----
+  let zone = null; // 'dalnice' | 'rychlostni' | 'obytna' | 'v_obci' | 'mimo_obec'
+
+  // maxspeed:type / zone:traffic tags are the most reliable explicit signal in CZ data
+  const zoneTag = tags['maxspeed:type'] || tags['zone:traffic'] || '';
+  if(/motorway/i.test(zoneTag)) zone = 'dalnice';
+  else if(/trunk/i.test(zoneTag)) zone = 'rychlostni';
+  else if(/urban/i.test(zoneTag)) zone = 'v_obci';
+  else if(/rural/i.test(zoneTag)) zone = 'mimo_obec';
+
+  if(!zone){
+    if(hw === 'motorway' || hw === 'motorway_link') zone = 'dalnice';
+    else if(hw === 'trunk' || hw === 'trunk_link') zone = 'rychlostni';
+    else if(hw === 'living_street') zone = 'obytna';
+    else if(hw === 'residential' || hw === 'service' || hw === 'unclassified'){
+      zone = 'v_obci'; // these road classes only exist inside built-up areas in CZ OSM tagging
+    } else {
+      // primary/secondary/tertiary can be either — check surroundings for settlement
+      const urban = await isNearSettlement(lat, lon);
+      zone = urban ? 'v_obci' : 'mimo_obec';
+    }
   }
 
-  // unknown road class — fall back to conservative in-village default
-  return { limit: 50, name: roadName, source: 'odhad' };
+  // ---- 2) limit value: explicit tag wins, else Czech legal default per zone ----
+  let limitVal = null;
+  let source = 'odhad podle úseku';
+  if(tags.maxspeed){
+    const parsed = parseInt(tags.maxspeed);
+    if(!isNaN(parsed)){ limitVal = parsed; source = 'dopravní značení (OSM)'; }
+  }
+  if(limitVal == null){
+    const defaults = { dalnice:130, rychlostni:110, obytna:20, v_obci:50, mimo_obec:90 };
+    limitVal = defaults[zone];
+  }
+
+  return { limit: limitVal, name: roadName, source, zone };
 }
 
 function czechHighwayLabel(hw){
