@@ -3,16 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Speed Guardian Online</title>
+    <title>Speed Guardian - Screen OCR</title>
     
     <!-- PWA Manifest -->
-    <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlNwZWVkIEd1YXJkaWFuIiwKICAic2hvcnRfbmFtZSI6ICJTcGVlZEd1YXJkIiwKICAic3RhcnRfdXJsIjogIi4iLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMwYzBjMGMiLAogICJ0aGVtZV9jb2xvciI6ICIjZmYzYjMwIiwKICAiaWNvbnMiOiBbCiAgICB7CiAgICAgICJzcmMiOiAiaHR0cHM6Ly9jZG4taWNvbnMtcG5nLmZsYXRpY29uLmNvbS81MTIvMjg3LzI4NzYyOC5wbmciLAogICAgICAidHlwZSI6ICJpbWFnZS9wbmciLAogICAgICAidHlwZSI6ICI1MTJ4NTEyIgogICAgfQogIF0KfQ==">
+    <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlNwZWVkIEd1YXJkaWFuIE9DUiIsCiAgInNob3J0X25hbWUiOiAiU3BlZWRPQ1IiLAogICJzdGFydF91cmwiOiAiLiIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImJhY2tncm91bmRfY29sb3IiOiAiIzBjMGMwYyIsCiAgInRoZW1lX2NvbG9yIjogIiNmZjNiMzAiLAogICJpY29ucyI6IFsKICAgIHsKICAgICAgInNyYyI6ICJodHRwczovL2Nkbi1pY29ucy1wbmcuZmxhdGljb24uY29tLzUxMi8yODcvMjg3NjI4LnBuZyIsCiAgICAgICJ0eXBlIjogImltYWdlL3BuZyIsCiAgICAgICJzaXplcyI6ICI1MTJ4NTEyIgogICAgfQogIF0KfQ==">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-    <!-- Leaflet.js pro mapy -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Tesseract.js pro OCR (čtení textu z obrazovky) -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
     <style>
         :root {
@@ -20,6 +19,7 @@
             --panel-bg: #161616;
             --accent-color: #ff3b30;
             --green-color: #04b033;
+            --blue-color: #007aff;
             --text-color: #ffffff;
         }
 
@@ -31,396 +31,395 @@
         body {
             margin: 0;
             padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
             height: 100vh;
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            position: relative;
         }
 
-        #map {
+        /* Video / Canvas kontejner */
+        #container {
             flex: 1;
+            position: relative;
             width: 100%;
-            background-color: var(--bg-color);
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
         }
 
-        .leaflet-tile-container {
-            filter: invert(100%) hue-rotate(180deg) brightness(60%) contrast(90%);
+        video {
+            display: none; /* Video běží skrytě na pozadí */
         }
 
-        .leaflet-container {
-            background: var(--bg-color) !important;
+        /* 1:1 Vykreslovací plátno streamu */
+        canvas {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
         }
 
-        .leaflet-control-attribution {
-            display: none !important;
+        /* Overlay pro výběr výřezu */
+        #selection-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
         }
 
-        /* Horní plovoucí status lišta */
-        .status-toast {
+        .crop-area {
+            position: absolute;
+            border: 2px dashed var(--accent-color);
+            background: rgba(255, 59, 48, 0.15);
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6);
+            display: none;
+        }
+
+        /* Tři kulatá tlačítka vpravo nahoře */
+        .top-controls {
             position: absolute;
             top: 40px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 1000;
-            background: rgba(22, 22, 22, 0.85);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 10px 20px;
-            border-radius: 30px;
-            font-size: 13px;
-            color: #aaa;
-            max-width: 90%;
-            text-align: center;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            pointer-events: none;
-            transition: opacity 0.3s ease;
+            right: 20px;
+            display: flex;
+            gap: 12px;
+            z-index: 10;
         }
 
-        /* Spodní ovládací panel */
-        .control-panel {
+        .circle-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(22, 22, 22, 0.85);
+            backdrop-filter: blur(10px);
+            color: var(--text-color);
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            transition: all 0.2s ease;
+        }
+
+        .circle-btn:active {
+            transform: scale(0.9);
+        }
+
+        .circle-btn.active {
+            background: var(--green-color);
+            border-color: var(--green-color);
+        }
+
+        .circle-btn.cropping-mode {
+            background: var(--blue-color);
+            border-color: var(--blue-color);
+            animation: pulse-blue 1.5s infinite;
+        }
+
+        @keyframes pulse-blue {
+            0% { box-shadow: 0 0 0 0 rgba(0, 122, 255, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(0, 122, 255, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 122, 255, 0); }
+        }
+
+        /* Spodní info bar a zobrazení výřezu */
+        .bottom-panel {
             background-color: var(--panel-bg);
-            padding: 25px 20px 40px 20px;
+            padding: 20px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             border-top: 1px solid #222;
-            box-shadow: 0 -10px 30px rgba(0,0,0,0.7);
-            z-index: 1001;
+            z-index: 10;
         }
 
-        .speed-limit-sign {
-            width: 85px;
-            height: 85px;
-            border: 8px solid var(--accent-color);
-            border-radius: 50%;
-            background-color: #222;
-            color: var(--text-color);
+        .debug-crop-preview {
+            width: 100px;
+            height: 50px;
+            background: #000;
+            border: 1px solid #444;
+            border-radius: 8px;
+            overflow: hidden;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 30px;
-            font-weight: 900;
-            box-shadow: 0 4px 15px rgba(255, 59, 48, 0.2);
-            transition: border-color 0.3s ease;
         }
 
-        .current-speed-box {
-            text-align: center;
+        #crop-canvas-preview {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .ocr-results {
             flex: 1;
+            margin-left: 20px;
+            font-size: 14px;
+            color: #aaa;
         }
 
-        .speed-value {
-            font-size: 76px;
-            font-weight: 900;
-            line-height: 1;
-            letter-spacing: -2px;
-            font-variant-numeric: tabular-nums;
-        }
-
-        .speed-unit {
-            font-size: 13px;
-            color: #666;
-            text-transform: uppercase;
+        .ocr-value {
+            font-size: 24px;
             font-weight: bold;
-            margin-top: 4px;
-            letter-spacing: 1px;
-        }
-
-        .gong-button {
-            background-color: var(--green-color);
-            color: white;
-            border: none;
-            padding: 14px 24px;
-            font-size: 16px;
-            font-weight: bold;
-            border-radius: 50px;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(4, 176, 51, 0.3);
-            transition: all 0.2s ease;
-            min-width: 120px;
-            text-align: center;
-        }
-
-        .gong-button.muted {
-            background-color: #333;
-            box-shadow: none;
-            color: #888;
-        }
-
-        .gong-button:active {
-            transform: scale(0.95);
+            color: #fff;
         }
     </style>
 </head>
 <body>
 
-<div class="status-toast" id="status">Hledám GPS...</div>
+<!-- Vrchní ovládací tlačítka -->
+<div class="top-controls">
+    <!-- 1. Audio Gong -->
+    <button class="circle-btn active" id="audio-btn" title="Zapnout/Vypnout Gong">🔊</button>
+    <!-- 2. Volba okna / obrazovky -->
+    <button class="circle-btn" id="select-screen-btn" title="Vybrat okno Waze">🖥️</button>
+    <!-- 3. Nástroj Výstřižek (Crop) -->
+    <button class="circle-btn" id="crop-tool-btn" title="Označit zónu rychlosti">✂️</button>
+</div>
 
-<div id="map"></div>
-
-<div class="control-panel">
-    <div class="speed-limit-sign" id="limit-sign">--</div>
+<!-- Hlavní zrcadlová plocha -->
+<div id="container">
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="mirror-canvas"></canvas>
     
-    <div class="current-speed-box">
-        <div class="speed-value" id="current-speed">0</div>
-        <div class="speed-unit">KM/H</div>
+    <!-- Vrstva pro kreslení výběru výstřižku -->
+    <div id="selection-overlay">
+        <div class="crop-area" id="crop-indicator"></div>
     </div>
+</div>
 
-    <button class="gong-button" id="gong-btn">Gong: ZAP</button>
+<!-- Spodní debug panel -->
+<div class="bottom-panel">
+    <div class="debug-crop-preview">
+        <canvas id="crop-canvas-preview"></canvas>
+    </div>
+    <div class="ocr-results">
+        <div>Detekovaný text:</div>
+        <div class="ocr-value" id="ocr-detected-text">--</div>
+    </div>
 </div>
 
 <script>
-    let map, userMarker, accuracyCircle;
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('mirror-canvas');
+    const ctx = canvas.getContext('2d');
+
+    const cropCanvasPreview = document.getElementById('crop-canvas-preview');
+    const cropPreviewCtx = cropCanvasPreview.getContext('2d');
+
+    const selectionOverlay = document.getElementById('selection-overlay');
+    const cropIndicator = document.getElementById('crop-indicator');
+
+    const audioBtn = document.getElementById('audio-btn');
+    const selectScreenBtn = document.getElementById('select-screen-btn');
+    const cropToolBtn = document.getElementById('crop-tool-btn');
+    const ocrDetectedText = document.getElementById('ocr-detected-text');
+
+    let stream = null;
+    let isCroppingMode = false;
     let gongEnabled = true;
-    let currentLimit = null; // Startuje jako null (na značce svítí --)
-    let currentSpeed = 0;
+    let audioCtx = null;
 
-    // Projetá trasa
-    let routeHistory = [];
-    let glowPolyline, corePolyline;
+    // Koordináty vybraného výřezu (relativní k plátnu 0-1)
+    let cropCoords = { x: 0.1, y: 0.1, w: 0.2, h: 0.1 }; 
+    let isDrawing = false;
+    let startX = 0, startY = 0;
 
-    // Pípací smyčka
+    // Pípání
     let beepIntervalId = null;
     let currentBeepSpeedMode = null; 
 
-    // Síťové dotazy
-    let isFetching = false;
-    let lastQueryTime = 0;
-    let lastQueryCoords = null;
-    const minQueryInterval = 2000; 
-
-    let audioCtx = null;
-
-    // Seznam spolehlivých Overpass zrcadel + alternativních API
-    const OVERPASS_SERVERS = [
-        "https://overpass-api.de/api/interpreter",
-        "https://overpass.kumi.systems/api/interpreter",
-        "https://lz4.overpass-api.de/api/interpreter",
-        "https://z.overpass-api.de/api/interpreter"
-    ];
-    let currentServerIndex = 0;
-
-    const statusElement = document.getElementById('status');
-    const speedElement = document.getElementById('current-speed');
-    const limitSignElement = document.getElementById('limit-sign');
-    const gongBtn = document.getElementById('gong-btn');
-
-    function init() {
-        map = L.map('map', { 
-            zoomControl: false,
-            attributionControl: false 
-        }).setView([49.195, 16.608], 16);
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-        glowPolyline = L.polyline([], {
-            color: '#00bfff',
-            weight: 12,
-            opacity: 0.4
-        }).addTo(map);
-
-        corePolyline = L.polyline([], {
-            color: '#ffffff',
-            weight: 4,
-            opacity: 0.9
-        }).addTo(map);
-
-        const pulseIcon = L.divIcon({
-            className: 'custom-div-icon',
-            html: `<div style="background-color: #0a84ff; width: 16px; height: 16px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 10px rgba(10,132,255,0.8);"></div>`,
-            iconSize: [16, 16],
-            iconAnchor: [8, 8]
-        });
-
-        userMarker = L.marker([49.195, 16.608], { icon: pulseIcon }).addTo(map);
-        accuracyCircle = L.circle([49.195, 16.608], {
-            radius: 0,
-            fillColor: '#0a84ff',
-            fillOpacity: 0.15,
-            color: 'transparent'
-        }).addTo(map);
-
-        if ("geolocation" in navigator) {
-            navigator.geolocation.watchPosition(onLocationSuccess, onLocationError, {
-                enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 0
-            });
-        } else {
-            showStatus("Chyba: GPS není podporováno.");
-        }
-    }
-
+    // Inicializace zvuku
     function initAudio() {
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
     }
 
-    gongBtn.addEventListener('click', () => {
+    audioBtn.addEventListener('click', () => {
         initAudio();
         gongEnabled = !gongEnabled;
         if (gongEnabled) {
-            gongBtn.textContent = "Gong: ZAP";
-            gongBtn.classList.remove('muted');
-            playSingleBeep(0.1); 
+            audioBtn.textContent = "🔊";
+            audioBtn.classList.add('active');
+            playSingleBeep(0.1);
         } else {
-            gongBtn.textContent = "Gong: VYP";
-            gongBtn.classList.add('muted');
+            audioBtn.textContent = "🔇";
+            audioBtn.classList.remove('active');
             stopBeepLoop();
         }
     });
 
-    async function onLocationSuccess(position) {
-        const coords = position.coords;
-        const lat = coords.latitude;
-        const lon = coords.longitude;
-        const accuracy = coords.accuracy;
-
-        currentSpeed = Math.round((coords.speed || 0) * 3.6);
-        if (currentSpeed < 0) currentSpeed = 0;
-
-        speedElement.textContent = currentSpeed;
-        userMarker.setLatLng([lat, lon]);
-        accuracyCircle.setLatLng([lat, lon]).setRadius(accuracy);
-        map.setView([lat, lon], 17);
-
-        // Záznam trasy
-        const currentPoint = [lat, lon];
-        if (routeHistory.length === 0 || getDistance(routeHistory[routeHistory.length - 1][0], routeHistory[routeHistory.length - 1][1], lat, lon) > 3) {
-            routeHistory.push(currentPoint);
-            
-            if (routeHistory.length > 1000) {
-                routeHistory.shift();
-            }
-
-            glowPolyline.setLatLngs(routeHistory);
-            corePolyline.setLatLngs(routeHistory);
-        }
-
-        // Získání limitu, pouze pokud je GPS přesná
-        if (accuracy < 35) {
-            fetchCurrentRoadLimitOnline(lat, lon);
-        } else {
-            showStatus("Vyčkej na přesný GPS signál...");
-        }
-
-        // Pípání spustíme, až když máme reálný limit ze serveru
-        if (currentLimit !== null) {
-            evaluateBeepState();
-        } else {
-            stopBeepLoop(); // Pokud limit neznáme, nepípáme
-        }
-    }
-
-    function onLocationError(error) {
-        console.error(error);
-        showStatus("Vyhledávám GPS signál...");
-    }
-
-    function showStatus(text) {
-        statusElement.textContent = text;
-        statusElement.style.opacity = "1";
-    }
-
-    function getDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371000;
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-                  Math.sin(dLon/2) * Math.sin(dLon/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        return R * c;
-    }
-
-    async function fetchWithTimeout(resource, options = {}) {
-        const { timeout = 2500 } = options;
-        const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), timeout);
+    // --- 1. ZRCADLENÍ OBRAZOVKY (Screen Capture API) ---
+    selectScreenBtn.addEventListener('click', async () => {
         try {
-            const response = await fetch(resource, { ...options, signal: controller.signal });
-            clearTimeout(id);
-            return response;
-        } catch (error) {
-            clearTimeout(id);
-            throw error;
-        }
-    }
-
-    async function fetchCurrentRoadLimitOnline(lat, lon) {
-        const now = Date.now();
-        
-        if (lastQueryCoords && currentLimit !== null) {
-            const distanceMoved = getDistance(lastQueryCoords.lat, lastQueryCoords.lon, lat, lon);
-            if (distanceMoved < 10 && (now - lastQueryTime) < 8000) {
-                return; 
-            }
-        }
-
-        if (isFetching || (now - lastQueryTime) < minQueryInterval) return;
-
-        isFetching = true;
-        lastQueryTime = now;
-        lastQueryCoords = { lat, lon };
-
-        const radius = 35;
-        const query = `[out:json][timeout:3];way(around:${radius},${lat},${lon})["maxspeed"];out tags;`;
-        
-        let success = false;
-        let attempts = 0;
-
-        while (!success && attempts < 2) {
-            const serverUrl = OVERPASS_SERVERS[currentServerIndex];
-            const url = `${serverUrl}?data=${encodeURIComponent(query)}`;
+            // Požádáme uživatele o výběr okna/obrazovky (např. Waze)
+            stream = await navigator.mediaDevices.getDisplayMedia({
+                video: { cursor: "always" },
+                audio: false
+            });
+            video.srcObject = stream;
+            selectScreenBtn.classList.add('active');
             
-            try {
-                const response = await fetchWithTimeout(url, { timeout: 2000 });
-                if (!response.ok) throw new Error();
-                
-                const data = await response.json();
-
-                if (data.elements && data.elements.length > 0) {
-                    let rawLimit = data.elements[0].tags.maxspeed;
-                    let limitNum = null;
-
-                    if (rawLimit === "urban" || rawLimit.includes("urban")) limitNum = 50;
-                    else if (rawLimit === "rural" || rawLimit.includes("rural")) limitNum = 90;
-                    else if (rawLimit === "motorway" || rawLimit.includes("motorway")) limitNum = 130;
-                    else {
-                        const parsed = parseInt(rawLimit);
-                        if (!isNaN(parsed)) limitNum = parsed;
-                    }
-
-                    if (limitNum !== null) {
-                        currentLimit = limitNum;
-                        limitSignElement.textContent = currentLimit;
-                        showStatus("Aktualizováno");
-                    }
-                    success = true;
-                } else {
-                    // Pokud zde není žádná označená silnice, necháme předchozí zjištěný limit (nebudeme hned dávat 50)
-                    success = true; 
-                }
-            } catch (e) {
-                currentServerIndex = (currentServerIndex + 1) % OVERPASS_SERVERS.length;
-                attempts++;
-            }
+            video.onloadedmetadata = () => {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                requestAnimationFrame(tick);
+                // Nastartujeme OCR smyčku každých 600ms
+                setInterval(runOCR, 600);
+            };
+        } catch (err) {
+            console.error("Chyba při sdílení obrazovky:", err);
         }
+    });
 
-        isFetching = false;
+    // Smyčka překreslování obrazu 1:1 na Canvas
+    function tick() {
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            drawCropPreview();
+        }
+        requestAnimationFrame(tick);
     }
 
-    function evaluateBeepState() {
-        if (!gongEnabled || currentLimit === null) {
-            stopBeepLoop();
-            return;
+    // --- 2. SELECTOR VÝŘEZU (Windows Screenshot styl) ---
+    cropToolBtn.addEventListener('click', () => {
+        isCroppingMode = !isCroppingMode;
+        if (isCroppingMode) {
+            cropToolBtn.classList.add('cropping-mode');
+            canvas.style.cursor = 'crosshair';
+        } else {
+            cropToolBtn.classList.remove('cropping-mode');
+            canvas.style.cursor = 'default';
+        }
+    });
+
+    // Detekce kreslení na canvasu
+    canvas.addEventListener('mousedown', (e) => {
+        if (!isCroppingMode) return;
+        const rect = canvas.getBoundingClientRect();
+        startX = e.clientX - rect.left;
+        startY = e.clientY - rect.top;
+        isDrawing = true;
+
+        cropIndicator.style.left = startX + 'px';
+        cropIndicator.style.top = startY + 'px';
+        cropIndicator.style.width = '0px';
+        cropIndicator.style.height = '0px';
+        cropIndicator.style.display = 'block';
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+        if (!isDrawing) return;
+        const rect = canvas.getBoundingClientRect();
+        const currentX = e.clientX - rect.left;
+        const currentY = e.clientY - rect.top;
+
+        const width = currentX - startX;
+        const height = currentY - startY;
+
+        cropIndicator.style.width = Math.abs(width) + 'px';
+        cropIndicator.style.height = Math.abs(height) + 'px';
+        cropIndicator.style.left = (width > 0 ? startX : currentX) + 'px';
+        cropIndicator.style.top = (height > 0 ? startY : currentY) + 'px';
+    });
+
+    canvas.addEventListener('mouseup', (e) => {
+        if (!isDrawing) return;
+        isDrawing = false;
+        isCroppingMode = false;
+        cropToolBtn.classList.remove('cropping-mode');
+        canvas.style.cursor = 'default';
+
+        const rect = canvas.getBoundingClientRect();
+        const endX = e.clientX - rect.left;
+        const endY = e.clientY - rect.top;
+
+        // Přepočet fyzických pixelů na relativní souřadnice (0-1) pro zachování škálování
+        const x = Math.min(startX, endX) / rect.width;
+        const y = Math.min(startY, endY) / rect.height;
+        const w = Math.abs(endX - startX) / rect.width;
+        const h = Math.abs(endY - startY) / rect.height;
+
+        cropCoords = { x, y, w, h };
+        cropIndicator.style.display = 'none';
+    });
+
+    // Vykreslení malého náhledu vybraného výřezu dole v liště
+    function drawCropPreview() {
+        if (!stream) return;
+        const sourceX = cropCoords.x * canvas.width;
+        const sourceY = cropCoords.y * canvas.height;
+        const sourceW = cropCoords.w * canvas.width;
+        const sourceH = cropCoords.h * canvas.height;
+
+        if (sourceW > 0 && sourceH > 0) {
+            cropCanvasPreview.width = sourceW;
+            cropCanvasPreview.height = sourceH;
+            cropPreviewCtx.drawImage(canvas, sourceX, sourceY, sourceW, sourceH, 0, 0, sourceW, sourceH);
+        }
+    }
+
+    // --- 3. ANALÝZA TEXTU V REÁLNÉM ČASE (OCR) ---
+    async function runOCR() {
+        if (!stream || isFetchingOCR) return;
+        isFetchingOCR = true;
+
+        // Vytáhneme obrázek z našeho skrytého náhledového plátna
+        const dataUrl = cropCanvasPreview.toDataURL('image/png');
+
+        try {
+            // Použijeme Tesseract.js pro bleskové přečtení číslic (nastaveno pouze na čísla pro rychlost)
+            const result = await Tesseract.recognize(dataUrl, 'eng', {
+                tessedit_char_whitelist: '0123456789/', // Hledáme jen čísla nebo lomítka
+            });
+
+            const text = result.data.text.trim();
+            ocrDetectedText.textContent = text || "--";
+
+            // Rozparsujeme text (např. pokud Waze ukazuje "58 / 50")
+            parseSpeedAndLimit(text);
+
+        } catch (e) {
+            console.error("OCR selhalo:", e);
         }
 
-        const overSpeed = currentSpeed - currentLimit;
+        isFetchingOCR = false;
+    }
+
+    let isFetchingOCR = false;
+
+    function parseSpeedAndLimit(text) {
+        // Hledáme jakákoliv čísla v textu
+        const numbers = text.match(/\d+/g);
+        if (!numbers || numbers.length === 0) return;
+
+        let detectedSpeed = 0;
+        let detectedLimit = 50; // Výchozí
+
+        if (numbers.length >= 2) {
+            // Waze často píše aktuální rychlost jako první a limit jako druhý (např. "58" a "50")
+            detectedSpeed = parseInt(numbers[0]);
+            detectedLimit = parseInt(numbers[1]);
+        } else if (numbers.length === 1) {
+            // Pokud vidíme jen jedno číslo, předpokládáme, že je to naše aktuální rychlost
+            detectedSpeed = parseInt(numbers[0]);
+        }
+
+        evaluateSpeed(detectedSpeed, detectedLimit);
+    }
+
+    function evaluateSpeed(speed, limit) {
+        const overSpeed = speed - limit;
 
         if (overSpeed >= 10) {
             startBeepLoop("fast", 100);
@@ -431,11 +430,15 @@
         }
     }
 
+    // --- 4. GONG / PÍPÁNÍ ---
     function startBeepLoop(mode, msInterval) {
+        if (!gongEnabled) {
+            stopBeepLoop();
+            return;
+        }
         if (currentBeepSpeedMode === mode) return;
 
         stopBeepLoop();
-
         currentBeepSpeedMode = mode;
         playSingleBeep(mode === "fast" ? 0.05 : 0.08);
 
@@ -478,49 +481,7 @@
         }
     }
 
-    window.onload = init;
-
-    // --- AKTUALIZAČNÍ LOGIKA PRO PWA ---
-    if ('serviceWorker' in navigator) {
-        const swCode = `
-            const CACHE_NAME = 'speed-guardian-v1';
-            
-            self.addEventListener('install', (e) => {
-                self.skipWaiting();
-            });
-
-            self.addEventListener('activate', (e) => {
-                e.waitUntil(self.clients.claim());
-            });
-
-            self.addEventListener('fetch', (e) => {
-                e.respondWith(
-                    fetch(e.request).catch(() => {
-                        return caches.match(e.request);
-                    })
-                );
-            });
-        `;
-        const blob = new Blob([swCode], {type: 'application/javascript'});
-        const swUrl = URL.createObjectURL(blob);
-        
-        navigator.serviceWorker.register(swUrl).then(reg => {
-            reg.update();
-
-            reg.addEventListener('updatefound', () => {
-                const newWorker = reg.installing;
-                newWorker.addEventListener('statechange', () => {
-                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                        console.log('Nalezena nová verze, aktualizuji aplikaci...');
-                        showStatus("Aktualizuji aplikaci na novou verzi...");
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 1000);
-                    }
-                });
-            });
-        }).catch(err => console.error('Chyba registrace SW:', err));
-    }
+    window.onload = initAudio;
 </script>
 
 </body>
