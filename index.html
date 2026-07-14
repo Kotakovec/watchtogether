@@ -1,547 +1,464 @@
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Speed Guardian - Screen OCR</title>
-    
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlNwZWVkIEd1YXJkaWFuIE9DUiIsCiAgInNob3J0X25hbWUiOiAiU3BlZWRPQ1IiLAogICJzdGFydF91cmwiOiAiLiIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImJhY2tncm91bmRfY29sb3IiOiAiIzBjMGMwYyIsCiAgInRoZW1lX2NvbG9yIjogIiNmZjNiMzAiLAogICJpY29ucyI6IFsKICAgIHsKICAgICAgInNyYyI6ICJodHRwczovL2Nkbi1pY29ucy1wbmcuZmxhdGljb24uY29tLzUxMi8yODcvMjg3NjI4LnBuZyIsCiAgICAgICJ0eXBlIjogImltYWdlL3BuZyIsCiAgICAgICJzaXplcyI6ICI1MTJ4NTEyIgogICAgfQogIF0KfQ==">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>SPEEDGUARD // HUD</title>
+<link rel="manifest" id="manifest-link">
+<meta name="theme-color" content="#050607">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&display=swap');
 
-    <!-- Tesseract.js pro OCR -->
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  :root{
+    --bg:#050607;
+    --panel:#0b0f0f;
+    --line:#1c2626;
+    --cyan:#4dfff0;
+    --amber:#ffb020;
+    --red:#ff3b3b;
+    --dim:#5b7070;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0; height:100%; background:var(--bg); color:var(--cyan);
+    font-family:'Share Tech Mono', monospace; overflow:hidden;
+    user-select:none;
+  }
+  body{
+    display:flex; flex-direction:column;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
 
-    <style>
-        :root {
-            --bg-color: #0c0c0c;
-            --panel-bg: #161616;
-            --accent-color: #ff3b30;
-            --green-color: #04b033;
-            --blue-color: #007aff;
-            --text-color: #ffffff;
-        }
+  /* scanline / vignette overlay */
+  .scan{
+    position:fixed; inset:0; pointer-events:none; z-index:50;
+    background:
+      repeating-linear-gradient(0deg, rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 1px, transparent 1px, transparent 3px),
+      radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.65) 100%);
+    mix-blend-mode:overlay;
+  }
 
-        * {
-            box-sizing: border-box;
-            -webkit-tap-highlight-color: transparent;
-        }
+  header{
+    padding:14px 18px 8px;
+    display:flex; justify-content:space-between; align-items:baseline;
+    font-family:'Orbitron', sans-serif;
+  }
+  header .logo{ font-size:15px; font-weight:900; letter-spacing:4px; color:var(--cyan); text-shadow:0 0 8px rgba(77,255,240,0.5);}
+  header .logo span{color:var(--dim);}
+  #clock{font-size:12px; color:var(--dim); letter-spacing:2px;}
 
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            position: relative;
-        }
+  main{
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    position:relative;
+  }
 
-        /* Kontejner pro živé zrcadlo */
-        #container {
-            flex: 1;
-            position: relative;
-            width: 100%;
-            background: #000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
+  .ring{
+    position:relative; width:min(78vw,340px); height:min(78vw,340px);
+    border-radius:50%;
+    border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow: inset 0 0 40px rgba(77,255,240,0.05);
+  }
+  .ring::before{
+    content:''; position:absolute; inset:14px; border-radius:50%;
+    border:1px dashed var(--line);
+  }
+  .ring.warn{ border-color: var(--amber); box-shadow: inset 0 0 60px rgba(255,176,32,0.15); }
+  .ring.over{ border-color: var(--red); animation:pulse-ring 0.6s infinite; }
+  @keyframes pulse-ring{
+    0%,100%{ box-shadow: inset 0 0 60px rgba(255,59,59,0.15); }
+    50%{ box-shadow: inset 0 0 90px rgba(255,59,59,0.45); }
+  }
 
-        video {
-            display: none; /* Snímaný stream běží skrytě na pozadí */
-        }
+  #speed{
+    font-family:'Orbitron', sans-serif; font-weight:900;
+    font-size:min(20vw,88px); line-height:1; color:var(--cyan);
+    text-shadow:0 0 18px rgba(77,255,240,0.55);
+    transition:color 0.2s;
+  }
+  .ring.warn #speed{ color:var(--amber); text-shadow:0 0 18px rgba(255,176,32,0.6);}
+  .ring.over #speed{ color:var(--red); text-shadow:0 0 22px rgba(255,59,59,0.75);}
+  #unit{ font-size:13px; letter-spacing:3px; color:var(--dim); margin-top:2px;}
 
-        canvas#mirror-canvas {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            display: block;
-        }
+  .status-row{
+    margin-top:22px; display:flex; gap:26px; font-size:11px; letter-spacing:2px; color:var(--dim);
+  }
+  .status-row b{ color:var(--cyan); font-weight:400;}
 
-        /* Průhledná vrstva na kreslení výstřižku */
-        #crop-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 5;
-            pointer-events: none;
-        }
+  .limit-panel{
+    padding:16px 20px calc(20px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--line);
+    background:linear-gradient(180deg, transparent, rgba(77,255,240,0.03));
+  }
+  .limit-row{
+    display:flex; align-items:center; justify-content:space-between; gap:14px;
+  }
+  .limit-label{ font-size:11px; letter-spacing:3px; color:var(--dim); font-family:'Orbitron',sans-serif;}
+  .limit-controls{ display:flex; align-items:center; gap:10px;}
+  .limit-controls button{
+    width:38px; height:38px; border-radius:6px;
+    background:var(--panel); border:1px solid var(--line); color:var(--cyan);
+    font-size:20px; font-family:'Orbitron',sans-serif; cursor:pointer;
+  }
+  .limit-controls button:active{ background:var(--line); }
+  #limitVal{
+    font-family:'Orbitron',sans-serif; font-weight:700; font-size:26px; min-width:64px; text-align:center;
+  }
 
-        #crop-overlay.active {
-            pointer-events: auto;
-            cursor: crosshair;
-        }
+  .presets{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;}
+  .presets button{
+    flex:1; min-width:50px; padding:8px 0; background:var(--panel); border:1px solid var(--line);
+    color:var(--dim); font-family:'Share Tech Mono',monospace; font-size:13px; border-radius:4px; cursor:pointer;
+  }
+  .presets button.active{ color:var(--bg); background:var(--cyan); border-color:var(--cyan); font-weight:700;}
 
-        .crop-area {
-            position: absolute;
-            border: 2px dashed var(--accent-color);
-            background: rgba(255, 59, 48, 0.15);
-            display: none;
-            pointer-events: none;
-        }
+  .toggle-row{
+    margin-top:14px; display:flex; align-items:center; justify-content:space-between;
+  }
+  .toggle-row .limit-label{ color:var(--dim);}
+  .switch{
+    width:46px; height:26px; border-radius:14px; background:var(--panel); border:1px solid var(--line);
+    position:relative; cursor:pointer;
+  }
+  .switch::after{
+    content:''; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%;
+    background:var(--dim); transition:all 0.2s;
+  }
+  .switch.on{ border-color:var(--cyan); }
+  .switch.on::after{ left:22px; background:var(--cyan); box-shadow:0 0 8px rgba(77,255,240,0.8);}
 
-        /* Kulatá tlačítka vpravo nahoře */
-        .top-controls {
-            position: absolute;
-            top: 40px;
-            right: 20px;
-            display: flex;
-            gap: 12px;
-            z-index: 10;
-        }
+  #gpsWarn{
+    position:absolute; top:8px; left:50%; transform:translateX(-50%);
+    font-size:10px; letter-spacing:2px; color:var(--amber); display:none;
+  }
 
-        .circle-btn {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            background: rgba(22, 22, 22, 0.85);
-            backdrop-filter: blur(10px);
-            color: var(--text-color);
-            font-size: 20px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            transition: all 0.2s ease;
-        }
-
-        .circle-btn:active {
-            transform: scale(0.9);
-        }
-
-        .circle-btn.active {
-            background: var(--green-color);
-            border-color: var(--green-color);
-        }
-
-        .circle-btn.cropping-mode {
-            background: var(--blue-color);
-            border-color: var(--blue-color);
-            animation: pulse-blue 1.5s infinite;
-        }
-
-        @keyframes pulse-blue {
-            0% { box-shadow: 0 0 0 0 rgba(0, 122, 255, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(0, 122, 255, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(0, 122, 255, 0); }
-        }
-
-        /* Spodní panel */
-        .bottom-panel {
-            background-color: var(--panel-bg);
-            padding: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-top: 1px solid #222;
-            z-index: 10;
-        }
-
-        .debug-crop-preview {
-            width: 100px;
-            height: 50px;
-            background: #000;
-            border: 1px solid #444;
-            border-radius: 8px;
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        #crop-canvas-preview {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            display: block;
-        }
-
-        .ocr-results {
-            flex: 1;
-            margin-left: 20px;
-            font-size: 14px;
-            color: #aaa;
-        }
-
-        .ocr-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #fff;
-        }
-
-        #status-toast {
-            position: absolute;
-            top: 40px;
-            left: 20px;
-            z-index: 10;
-            background: rgba(22, 22, 22, 0.85);
-            backdrop-filter: blur(5px);
-            padding: 10px 20px;
-            border-radius: 20px;
-            font-size: 13px;
-            border: 1px solid rgba(255,255,255,0.1);
-        }
-    </style>
+  #startOverlay{
+    position:fixed; inset:0; background:var(--bg); z-index:100;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:30px; text-align:center;
+  }
+  #startOverlay .logo{ font-family:'Orbitron',sans-serif; font-size:22px; font-weight:900; letter-spacing:6px; color:var(--cyan); text-shadow:0 0 12px rgba(77,255,240,0.6);}
+  #startOverlay p{ color:var(--dim); font-size:13px; max-width:280px; line-height:1.6;}
+  #startBtn{
+    font-family:'Orbitron',sans-serif; font-weight:700; letter-spacing:3px;
+    background:transparent; border:1px solid var(--cyan); color:var(--cyan);
+    padding:14px 30px; border-radius:4px; font-size:13px; cursor:pointer;
+  }
+  #startBtn:active{ background:rgba(77,255,240,0.15); }
+</style>
 </head>
 <body>
 
-<div id="status-toast">Připraveno ke sdílení</div>
+<div class="scan"></div>
 
-<!-- Plovoucí ovládací tlačítka -->
-<div class="top-controls">
-    <!-- 1. Audio Gong -->
-    <button class="circle-btn active" id="audio-btn">🔊</button>
-    <!-- 2. Vybrat sdílení obrazovky (Google Meet styl) -->
-    <button class="circle-btn" id="select-screen-btn">🖥️</button>
-    <!-- 3. Nástroj Výstřižek (Crop) -->
-    <button class="circle-btn" id="crop-tool-btn">✂️</button>
+<div id="startOverlay">
+  <div class="logo">SPEEDGUARD</div>
+  <p>Hlídání rychlosti přes GPS. Nastav limit a app tě zvukově upozorní, když ho překročíš. Vyžaduje povolení polohy.</p>
+  <button id="startBtn">SPUSTIT MONITOR</button>
 </div>
 
-<!-- Hlavní zrcadlící plátno -->
-<div id="container">
-    <video id="webcam" autoplay playsinline></video>
-    <canvas id="mirror-canvas"></canvas>
-    
-    <!-- Aktivní vrstva pro kreslení ořezu -->
-    <div id="crop-overlay">
-        <div class="crop-area" id="crop-indicator"></div>
-    </div>
-</div>
+<header>
+  <div class="logo">SPEED<span>GUARD</span></div>
+  <div id="clock">--:--:--</div>
+</header>
 
-<!-- Spodní debug panel s náhledem výřezu -->
-<div class="bottom-panel">
-    <div class="debug-crop-preview">
-        <canvas id="crop-canvas-preview"></canvas>
+<main>
+  <div id="gpsWarn">GPS SIGNÁL SLABÝ</div>
+  <div class="ring" id="ring">
+    <div style="text-align:center;">
+      <div id="speed">0</div>
+      <div id="unit">KM/H</div>
     </div>
-    <div class="ocr-results">
-        <div>Čtení rychlosti / limitu:</div>
-        <div class="ocr-value" id="ocr-detected-text">--</div>
+  </div>
+  <div class="status-row">
+    <div>LIMIT <b id="limitEcho">50</b></div>
+    <div>PŘESNOST <b id="accEcho">--</b></div>
+    <div>STAV <b id="stateEcho">OK</b></div>
+  </div>
+</main>
+
+<div class="limit-panel">
+  <div class="limit-row">
+    <div class="limit-label">LIMIT ÚSEKU</div>
+    <div class="limit-controls">
+      <button id="minus">−</button>
+      <div id="limitVal">50</div>
+      <button id="plus">+</button>
     </div>
+  </div>
+  <div class="presets">
+    <button data-v="30">30</button>
+    <button data-v="50" class="active">50</button>
+    <button data-v="70">70</button>
+    <button data-v="90">90</button>
+    <button data-v="130">130</button>
+  </div>
+  <div class="toggle-row">
+    <div class="limit-label">ZVUK (BMW SEATBELT STYL)</div>
+    <div class="switch on" id="soundSwitch"></div>
+  </div>
+  <div class="toggle-row">
+    <div class="limit-label">AUTO LIMIT (Z MAPY)</div>
+    <div class="switch" id="autoSwitch"></div>
+  </div>
+  <div id="autoInfo" style="display:none; font-size:10px; letter-spacing:1px; color:var(--dim); margin-top:8px; text-align:right;">ZDROJ: --</div>
 </div>
 
 <script>
-    const video = document.getElementById('webcam');
-    const canvas = document.getElementById('mirror-canvas');
-    const ctx = canvas.getContext('2d');
+// ---------- PWA manifest (inline, no separate file needed) ----------
+const manifest = {
+  name: "SpeedGuard",
+  short_name: "SpeedGuard",
+  start_url: ".",
+  display: "fullscreen",
+  background_color: "#050607",
+  theme_color: "#050607",
+  icons: []
+};
+document.getElementById('manifest-link').href =
+  'data:application/manifest+json,' + encodeURIComponent(JSON.stringify(manifest));
 
-    const cropOverlay = document.getElementById('crop-overlay');
-    const cropIndicator = document.getElementById('crop-indicator');
-    
-    const cropCanvasPreview = document.getElementById('crop-canvas-preview');
-    const cropPreviewCtx = cropCanvasPreview.getContext('2d');
+// service worker for basic offline/installable behavior
+if ('serviceWorker' in navigator) {
+  const swCode = `
+    self.addEventListener('install', e => self.skipWaiting());
+    self.addEventListener('activate', e => self.clients.claim());
+    self.addEventListener('fetch', e => {});
+  `;
+  const blob = new Blob([swCode], {type:'application/javascript'});
+  navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+}
 
-    const audioBtn = document.getElementById('audio-btn');
-    const selectScreenBtn = document.getElementById('select-screen-btn');
-    const cropToolBtn = document.getElementById('crop-tool-btn');
-    const ocrDetectedText = document.getElementById('ocr-detected-text');
-    const statusToast = document.getElementById('status-toast');
+// ---------- State ----------
+let limit = 50;
+let soundOn = true;
+let watchId = null;
+let audioCtx = null;
+let beepInterval = null;
+let wakeLock = null;
 
-    let stream = null;
-    let isCroppingMode = false;
-    let gongEnabled = true;
-    let audioCtx = null;
+const speedEl = document.getElementById('speed');
+const ringEl = document.getElementById('ring');
+const limitValEl = document.getElementById('limitVal');
+const limitEchoEl = document.getElementById('limitEcho');
+const accEchoEl = document.getElementById('accEcho');
+const stateEchoEl = document.getElementById('stateEcho');
+const gpsWarnEl = document.getElementById('gpsWarn');
+const clockEl = document.getElementById('clock');
 
-    // Relativní koordináty výřezu (výchozí nastavení na střed)
-    let cropCoords = { x: 0.1, y: 0.1, w: 0.2, h: 0.1 }; 
-    let isDrawing = false;
-    let startX = 0, startY = 0;
+function setLimit(v){
+  limit = Math.max(5, Math.min(150, v));
+  limitValEl.textContent = limit;
+  limitEchoEl.textContent = limit;
+  document.querySelectorAll('.presets button').forEach(b=>{
+    b.classList.toggle('active', parseInt(b.dataset.v)===limit);
+  });
+}
+document.getElementById('plus').onclick = ()=>setLimit(limit+5);
+document.getElementById('minus').onclick = ()=>setLimit(limit-5);
+document.querySelectorAll('.presets button').forEach(b=>{
+  b.onclick = ()=>setLimit(parseInt(b.dataset.v));
+});
 
-    let beepIntervalId = null;
-    let currentBeepSpeedMode = null; 
-    let isFetchingOCR = false;
+const soundSwitch = document.getElementById('soundSwitch');
+soundSwitch.onclick = ()=>{
+  soundOn = !soundOn;
+  soundSwitch.classList.toggle('on', soundOn);
+  if(!soundOn) stopBeep();
+};
 
-    function initAudio() {
-        if (!audioCtx) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
+// ---------- AUTO limit (Overpass / OSM maxspeed lookup) ----------
+let autoMode = false;
+let lastManualLimit = limit;
+let autoFetchBusy = false;
+let lastAutoFetch = 0;
+const autoSwitch = document.getElementById('autoSwitch');
+const autoInfo = document.getElementById('autoInfo');
+const limitControls = document.querySelector('.limit-controls');
+const presetsEl = document.querySelector('.presets');
+
+autoSwitch.onclick = ()=>{
+  autoMode = !autoMode;
+  autoSwitch.classList.toggle('on', autoMode);
+  autoInfo.style.display = autoMode ? 'block' : 'none';
+  limitControls.style.opacity = autoMode ? '0.35' : '1';
+  presetsEl.style.opacity = autoMode ? '0.35' : '1';
+  limitControls.style.pointerEvents = autoMode ? 'none' : 'auto';
+  presetsEl.style.pointerEvents = autoMode ? 'none' : 'auto';
+  if(autoMode){
+    lastManualLimit = limit;
+    autoInfo.textContent = 'ZDROJ: HLEDÁM...';
+  } else {
+    setLimit(lastManualLimit);
+  }
+};
+
+async function fetchSpeedLimitNear(lat, lon){
+  // radius search, take nearest way with a maxspeed tag
+  const q = `[out:json][timeout:8];way(around:60,${lat},${lon})[highway][maxspeed];out tags center 5;`;
+  const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(q);
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('overpass ' + res.status);
+  const data = await res.json();
+  if(!data.elements || !data.elements.length) return null;
+  const el = data.elements[0];
+  let raw = el.tags.maxspeed;
+  let val = parseInt(raw);
+  if(isNaN(val)){
+    // handle things like "CZ:urban" (50) / "CZ:rural" (90) / "walk" etc.
+    if(/urban/i.test(raw)) val = 50;
+    else if(/rural/i.test(raw)) val = 90;
+    else if(/motorway/i.test(raw)) val = 130;
+    else if(/walk/i.test(raw)) val = 20;
+    else return null;
+  }
+  const roadName = el.tags.name || el.tags.ref || 'úsek bez názvu';
+  return { limit: val, name: roadName };
+}
+
+async function autoUpdateLimit(lat, lon){
+  const now = Date.now();
+  if(autoFetchBusy || now - lastAutoFetch < 15000) return; // throttle: max once/15s
+  autoFetchBusy = true;
+  lastAutoFetch = now;
+  try{
+    const result = await fetchSpeedLimitNear(lat, lon);
+    if(result){
+      setLimit(result.limit);
+      autoInfo.textContent = 'ZDROJ: ' + result.name.toUpperCase() + ' (' + result.limit + ')';
+    } else {
+      autoInfo.textContent = 'ZDROJ: NEZNÁMÝ, PONECHÁVÁM ' + limit;
     }
+  }catch(e){
+    autoInfo.textContent = 'ZDROJ: OFFLINE / CHYBA';
+  }finally{
+    autoFetchBusy = false;
+  }
+}
 
-    audioBtn.addEventListener('click', () => {
-        initAudio();
-        gongEnabled = !gongEnabled;
-        if (gongEnabled) {
-            audioBtn.textContent = "🔊";
-            audioBtn.classList.add('active');
-            playSingleBeep(0.1);
-        } else {
-            audioBtn.textContent = "🔇";
-            audioBtn.classList.remove('active');
-            stopBeepLoop();
-        }
-    });
+function tickClock(){
+  const d = new Date();
+  clockEl.textContent = d.toLocaleTimeString('cs-CZ', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+setInterval(tickClock, 1000);
+tickClock();
 
-    // --- 1. ZRCADLENÍ OBRAZOVKY (Google Meet styl) ---
-    selectScreenBtn.addEventListener('click', async () => {
-        try {
-            // Vyvolá systémové okno pro výběr okna/obrazovky
-            stream = await navigator.mediaDevices.getDisplayMedia({
-                video: { 
-                    cursor: "always",
-                    displaySurface: "browser" // optimalizace pro okna prohlížeče / aplikací
-                },
-                audio: false
-            });
-            
-            video.srcObject = stream;
-            selectScreenBtn.classList.add('active');
-            statusToast.textContent = "Obrazovka nasdílena";
-            
-            video.onloadedmetadata = () => {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                requestAnimationFrame(tick);
-                
-                // Nastartujeme OCR analýzu (každých 600 ms)
-                setInterval(runOCR, 600);
-            };
-        } catch (err) {
-            console.error("Chyba sdílení obrazovky:", err);
-            statusToast.textContent = "Sdílení zrušeno";
-        }
-    });
+// ---------- Audio: BMW seatbelt-style warning beep ----------
+function ensureAudio(){
+  if(!audioCtx){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+}
 
-    // Nekonečná smyčka překreslování streamu na plátno
-    function tick() {
-        if (video.readyState === video.HAVE_ENOUGH_DATA) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            drawCropPreview();
-        }
-        requestAnimationFrame(tick);
+function playBeep(){
+  ensureAudio();
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(2200, now);
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(0.35, now + 0.005);
+  gain.gain.linearRampToValueAtTime(0, now + 0.09);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(now);
+  osc.stop(now + 0.1);
+}
+
+function startBeep(intervalMs){
+  stopBeep();
+  playBeep();
+  beepInterval = setInterval(playBeep, intervalMs);
+}
+function stopBeep(){
+  if(beepInterval){ clearInterval(beepInterval); beepInterval = null; }
+}
+
+// ---------- Geolocation ----------
+function msToKmh(ms){ return ms==null ? 0 : ms*3.6; }
+
+function handlePosition(pos){
+  const c = pos.coords;
+  const kmh = c.speed != null ? msToKmh(c.speed) : null;
+
+  accEchoEl.textContent = c.accuracy ? Math.round(c.accuracy)+'m' : '--';
+  gpsWarnEl.style.display = (c.accuracy && c.accuracy > 30) ? 'block' : 'none';
+
+  if(autoMode){
+    autoUpdateLimit(c.latitude, c.longitude);
+  }
+
+  if(kmh == null){
+    stateEchoEl.textContent = 'ČEKÁM';
+    return;
+  }
+
+  const shown = Math.round(kmh);
+  speedEl.textContent = shown;
+
+  const over = kmh - limit;
+
+  ringEl.classList.remove('warn','over');
+  if(over > 8){
+    ringEl.classList.add('over');
+    stateEchoEl.textContent = 'PŘEKROČENO';
+    if(soundOn){
+      // faster beeping the more you're over, like the BMW belt chime ramping up
+      const interval = Math.max(180, 500 - over*8);
+      if(!beepInterval) startBeep(interval);
+      else { stopBeep(); startBeep(interval); }
     }
+  } else if(over > 0){
+    ringEl.classList.add('warn');
+    stateEchoEl.textContent = 'POZOR';
+    if(soundOn){
+      if(!beepInterval) startBeep(700);
+    } else stopBeep();
+  } else {
+    stateEchoEl.textContent = 'OK';
+    stopBeep();
+  }
+}
 
-    // --- 2. SCREENSHOT CROPPER (Kreslení výřezu) ---
-    cropToolBtn.addEventListener('click', () => {
-        isCroppingMode = !isCroppingMode;
-        if (isCroppingMode) {
-            cropToolBtn.classList.add('cropping-mode');
-            cropOverlay.classList.add('active');
-            statusToast.textContent = "Označ tahem prstu/myši zónu s rychlostí";
-        } else {
-            cropToolBtn.classList.remove('cropping-mode');
-            cropOverlay.classList.remove('active');
-        }
-    });
+function handleError(err){
+  stateEchoEl.textContent = 'GPS CHYBA';
+  gpsWarnEl.style.display = 'block';
+  gpsWarnEl.textContent = 'GPS NEDOSTUPNÉ: ' + err.message;
+}
 
-    // Pomocná funkce pro získání relativních koordinátů kreslení
-    function handleStart(clientX, clientY) {
-        if (!isCroppingMode) return;
-        const rect = cropOverlay.getBoundingClientRect();
-        startX = clientX - rect.left;
-        startY = clientY - rect.top;
-        isDrawing = true;
+function startWatch(){
+  if(!('geolocation' in navigator)){
+    stateEchoEl.textContent = 'BEZ GPS';
+    return;
+  }
+  watchId = navigator.geolocation.watchPosition(handlePosition, handleError, {
+    enableHighAccuracy: true,
+    maximumAge: 1000,
+    timeout: 10000
+  });
+}
 
-        cropIndicator.style.left = startX + 'px';
-        cropIndicator.style.top = startY + 'px';
-        cropIndicator.style.width = '0px';
-        cropIndicator.style.height = '0px';
-        cropIndicator.style.display = 'block';
+async function requestWakeLock(){
+  try{
+    if('wakeLock' in navigator){
+      wakeLock = await navigator.wakeLock.request('screen');
     }
+  }catch(e){}
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible' && watchId != null) requestWakeLock();
+});
 
-    function handleMove(clientX, clientY) {
-        if (!isDrawing) return;
-        const rect = cropOverlay.getBoundingClientRect();
-        const currentX = clientX - rect.left;
-        const currentY = clientY - rect.top;
+// ---------- Start flow ----------
+document.getElementById('startBtn').onclick = ()=>{
+  ensureAudio();
+  playBeep();
+  startWatch();
+  requestWakeLock();
+  document.getElementById('startOverlay').style.display = 'none';
+};
 
-        const width = currentX - startX;
-        const height = currentY - startY;
-
-        cropIndicator.style.width = Math.abs(width) + 'px';
-        cropIndicator.style.height = Math.abs(height) + 'px';
-        cropIndicator.style.left = (width > 0 ? startX : currentX) + 'px';
-        cropIndicator.style.top = (height > 0 ? startY : currentY) + 'px';
-    }
-
-    function handleEnd(clientX, clientY) {
-        if (!isDrawing) return;
-        isDrawing = false;
-        isCroppingMode = false;
-        cropToolBtn.classList.remove('cropping-mode');
-        cropOverlay.classList.remove('active');
-
-        const rect = cropOverlay.getBoundingClientRect();
-        const endX = clientX - rect.left;
-        const endY = clientY - rect.top;
-
-        // Uložení relativního poměru (0 až 1)
-        cropCoords.x = Math.min(startX, endX) / rect.width;
-        cropCoords.y = Math.min(startY, endY) / rect.height;
-        cropCoords.w = Math.abs(endX - startX) / rect.width;
-        cropCoords.h = Math.abs(endY - startY) / rect.height;
-
-        cropIndicator.style.display = 'none';
-        statusToast.textContent = "Výřez nastaven";
-    }
-
-    // Myš
-    cropOverlay.addEventListener('mousedown', (e) => handleStart(e.clientX, e.clientY));
-    cropOverlay.addEventListener('mousemove', (e) => handleMove(e.clientX, e.clientY));
-    cropOverlay.addEventListener('mouseup', (e) => handleEnd(e.clientX, e.clientY));
-
-    // Dotyk (mobil)
-    cropOverlay.addEventListener('touchstart', (e) => handleStart(e.touches[0].clientX, e.touches[0].clientY));
-    cropOverlay.addEventListener('touchmove', (e) => handleMove(e.touches[0].clientX, e.touches[0].clientY));
-    cropOverlay.addEventListener('touchend', (e) => {
-        const touch = e.changedTouches[0];
-        handleEnd(touch.clientX, touch.clientY);
-    });
-
-    // Vykreslení vyříznutého obrazu na náhledové plátno
-    function drawCropPreview() {
-        if (!stream) return;
-        const sourceX = cropCoords.x * canvas.width;
-        const sourceY = cropCoords.y * canvas.height;
-        const sourceW = cropCoords.w * canvas.width;
-        const sourceH = cropCoords.h * canvas.height;
-
-        if (sourceW > 0 && sourceH > 0) {
-            cropCanvasPreview.width = sourceW;
-            cropCanvasPreview.height = sourceH;
-            // Výřez děláme přímo z našeho mirror-canvasu (žádný CORS problém!)
-            cropPreviewCtx.drawImage(canvas, sourceX, sourceY, sourceW, sourceH, 0, 0, sourceW, sourceH);
-        }
-    }
-
-    // --- 3. BLESKOVÉ OCR ČTENÍ TEXTU ---
-    async function runOCR() {
-        if (!stream || isFetchingOCR) return;
-        isFetchingOCR = true;
-
-        const dataUrl = cropCanvasPreview.toDataURL('image/png');
-
-        try {
-            // Tesseract.js přečte čísla z výřezu
-            const result = await Tesseract.recognize(dataUrl, 'eng', {
-                tessedit_char_whitelist: '0123456789/', // vyfiltruje pouze čísla
-            });
-
-            const text = result.data.text.trim();
-            ocrDetectedText.textContent = text || "--";
-
-            parseAndEvaluate(text);
-        } catch (e) {
-            console.error(e);
-        }
-        isFetchingOCR = false;
-    }
-
-    function parseAndEvaluate(text) {
-        const numbers = text.match(/\d+/g);
-        if (!numbers || numbers.length === 0) return;
-
-        let speed = 0;
-        let limit = 50;
-
-        if (numbers.length >= 2) {
-            // Waze obvykle ukazuje aktuální rychlost jako první a limit jako druhý (např. 58 / 50)
-            speed = parseInt(numbers[0]);
-            limit = parseInt(numbers[1]);
-        } else if (numbers.length === 1) {
-            speed = parseInt(numbers[0]);
-        }
-
-        const overSpeed = speed - limit;
-
-        if (overSpeed >= 10) {
-            // Překročení o 10+ km/h -> vyvádí to a pípá 10x za sekundu
-            startBeepLoop("fast", 100);
-        } else if (overSpeed >= 2) {
-            // Překročení o 2-9 km/h -> pípá 3x za sekundu
-            startBeepLoop("slow", 333);
-        } else {
-            // V limitu -> ticho
-            stopBeepLoop();
-        }
-    }
-
-    // --- 4. AKUSTICKÝ GONG ---
-    function startBeepLoop(mode, msInterval) {
-        if (!gongEnabled) {
-            stopBeepLoop();
-            return;
-        }
-        if (currentBeepSpeedMode === mode) return;
-
-        stopBeepLoop();
-        currentBeepSpeedMode = mode;
-        playSingleBeep(mode === "fast" ? 0.05 : 0.08);
-
-        beepIntervalId = setInterval(() => {
-            playSingleBeep(mode === "fast" ? 0.05 : 0.08);
-        }, msInterval);
-    }
-
-    function stopBeepLoop() {
-        if (beepIntervalId !== null) {
-            clearInterval(beepIntervalId);
-            beepIntervalId = null;
-        }
-        currentBeepSpeedMode = null;
-    }
-
-    function playSingleBeep(duration) {
-        try {
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
-            }
-
-            const osc = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-
-            osc.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(950, audioCtx.currentTime);
-
-            gainNode.gain.setValueAtTime(0.4, audioCtx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-
-            osc.start(audioCtx.currentTime);
-            osc.stop(audioCtx.currentTime + duration);
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    window.onload = initAudio;
-
-    // --- AUTOMATICKÝ UPDATE PWA ---
-    if ('serviceWorker' in navigator) {
-        const swCode = `
-            self.addEventListener('install', (e) => self.skipWaiting());
-            self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
-            self.addEventListener('fetch', (e) => {
-                e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
-            });
-        `;
-        const blob = new Blob([swCode], {type: 'application/javascript'});
-        const swUrl = URL.createObjectURL(blob);
-        
-        navigator.serviceWorker.register(swUrl).then(reg => {
-            reg.update();
-            reg.addEventListener('updatefound', () => {
-                const newWorker = reg.installing;
-                newWorker.addEventListener('statechange', () => {
-                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                        window.location.reload();
-                    }
-                });
-            });
-        }).catch(err => console.error(err));
-    }
+setLimit(50);
 </script>
-
 </body>
 </html>
