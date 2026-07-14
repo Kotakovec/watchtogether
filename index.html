@@ -6,7 +6,7 @@
     <title>Speed Guardian Online</title>
     
     <!-- PWA Manifest -->
-    <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlNwZWVkIEd1YXJkaWFuIiwKICAic2hvcnRfbmFtZSI6ICJTcGVlZEd1YXJkIiwKICAic3RhcnRfdXJsIjogIi4iLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMwYzBjMGMiLAogICJ0aGVtZV9jb2xvciI6ICIjZmYzYjMwIiwKICAiaWNvbnMiOiBbCiAgICB7CiAgICAgICJzcmMiOiAiaHR0cHM6Ly9jZG4taWNvbnMtcG5nLmZsYXRpY29uLmNvbS81MTIvMjg3LzI4NzYyOC5wbmciLAogICAgICAidHlwZSI6ICJpbWFnZS9wbmciLAogICAgICAidHlwZSI6ICI1MTJ4NTEyIgogICAgfQogIF0KfQ==">
+    <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlNwZWVkIEd1YXJkaWFuIiwKICAic2hvcnRfbmFtZSI6ICJTcGVlZEd1YXJkIiwKICAic3RhcnRfdXJsIjogIi4iLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMwYzBjMGMiLAogICJ0aGVtZV9jb2xvciI6ICIjZmYzYjMwIiwKICAiaWNvbnMiOiBbCiAgICB7CiAgICAgICJzcmMiOiAiaHR0cHM6Ly9jZG4taWNvbnMtcG5nLmZsYXRpY29uLmNvbS81MTIvMjg3LzI4NzYyOC5wbmciLAogICAgICAidHlwZSI6ICJpbWFnZS9wbmciLAogICAgICAic2l6ZXMiOiAiNTEyeDUxMiIKICAgIH0KICBdCn0=">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
@@ -58,7 +58,7 @@
             display: none !important;
         }
 
-        /* Horní plovoucí status lišta */
+        /* Horní plovoucí status lišta - decentnější a bez červených chyb */
         .status-toast {
             position: absolute;
             top: 40px;
@@ -77,11 +77,6 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
             pointer-events: none;
             transition: opacity 0.3s ease;
-        }
-
-        .status-toast.error {
-            border-color: var(--accent-color);
-            color: #ff8e88;
         }
 
         /* Spodní ovládací panel */
@@ -162,7 +157,7 @@
 </head>
 <body>
 
-<div class="status-toast" id="status">Hledám GPS signál...</div>
+<div class="status-toast" id="status">Hledám GPS...</div>
 
 <div id="map"></div>
 
@@ -179,15 +174,19 @@
 
 <script>
     let map, userMarker, accuracyCircle;
-    let speechEnabled = true;
+    let gongEnabled = true;
     let currentLimit = 50; 
-    let lastSpokenTime = 0;
-    const speechDelay = 3500;
+    let lastGongTime = 0;
+    const gongDelay = 5000; // Gong zazní maximálně jednou za 5 sekund při trvalém překročení
 
-    // Řízení síťových požadavků
+    // Řízení síťových dotazů
     let isFetching = false;
     let lastQueryTime = 0;
-    const minQueryInterval = 1500; // Dotaz na limit pošleme maximálně jednou za 1.5 sekundy
+    let lastQueryCoords = null;
+    const minQueryInterval = 2000; // Dotaz na server max jednou za 2 sekundy
+
+    // Audio Context pro generování opravdového elektronického GONGU
+    let audioCtx = null;
 
     const OVERPASS_SERVERS = [
         "https://overpass-api.de/api/interpreter",
@@ -232,16 +231,24 @@
                 maximumAge: 0
             });
         } else {
-            showStatus("Chyba: GPS není podporováno.", true);
+            showStatus("Chyba: GPS není podporováno.");
+        }
+    }
+
+    // Inicializace zvuku při prvním kliknutí (prohlížeče blokují zvuk bez interakce)
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
     }
 
     gongBtn.addEventListener('click', () => {
-        speechEnabled = !speechEnabled;
-        if (speechEnabled) {
+        initAudio();
+        gongEnabled = !gongEnabled;
+        if (gongEnabled) {
             gongBtn.textContent = "Gong: ZAP";
             gongBtn.classList.remove('muted');
-            speak("Voice alerts active");
+            playGongSound(); // Krátký testovací gong
         } else {
             gongBtn.textContent = "Gong: VYP";
             gongBtn.classList.add('muted');
@@ -259,34 +266,40 @@
         speedElement.textContent = speedKMH;
         userMarker.setLatLng([lat, lon]);
         accuracyCircle.setLatLng([lat, lon]).setRadius(coords.accuracy);
-        map.setView([lat, lon], 17); // Trochu detailnější zoom pro online režim
+        map.setView([lat, lon], 17);
 
-        // HLAVNÍ ONLINE DOTAZ: Zeptáme se rovnou na bod, kde právě teď stojíme
+        // Hledání limitu online
         fetchCurrentRoadLimitOnline(lat, lon);
 
-        if (speedKMH >= (currentLimit + 2) && speechEnabled) {
-            triggerAlert();
+        // Pokud jedeme rychleji než limit + 2 km/h
+        if (speedKMH >= (currentLimit + 2) && gongEnabled) {
+            triggerGong();
         }
     }
 
     function onLocationError(error) {
         console.error(error);
-        showStatus("Ztráta GPS signálu...", true);
+        showStatus("Vyhledávám GPS signál...");
     }
 
-    function showStatus(text, isError = false) {
+    function showStatus(text) {
         statusElement.textContent = text;
-        if (isError) {
-            statusElement.classList.add('error');
-        } else {
-            statusElement.classList.remove('error');
-        }
         statusElement.style.opacity = "1";
     }
 
-    // Pomocný fetch s krátkým timeoutem, aby aplikace nevisela
+    function getDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371000;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    }
+
     async function fetchWithTimeout(resource, options = {}) {
-        const { timeout = 3000 } = options; // Rychlý online timeout (3s)
+        const { timeout = 2500 } = options;
         const controller = new AbortController();
         const id = setTimeout(() => controller.abort(), timeout);
         try {
@@ -299,17 +312,23 @@
         }
     }
 
-    // ČISTĚ ONLINE VYHLEDÁNÍ LIMITU PRO AKTUÁLNÍ POZICI
     async function fetchCurrentRoadLimitOnline(lat, lon) {
         const now = Date.now();
         
-        // Pokud zrovna probíhá jiný dotaz nebo od posledního dotazu uběhlo příliš málo času, nezatěžujeme síť
+        // Pokud stojíme nebo jsme se nepohnuli o víc než 10 metrů, dotaz na server vůbec neposíláme
+        if (lastQueryCoords) {
+            const distanceMoved = getDistance(lastQueryCoords.lat, lastQueryCoords.lon, lat, lon);
+            if (distanceMoved < 10 && (now - lastQueryTime) < 10000) {
+                return; 
+            }
+        }
+
         if (isFetching || (now - lastQueryTime) < minQueryInterval) return;
 
         isFetching = true;
         lastQueryTime = now;
+        lastQueryCoords = { lat, lon };
 
-        // Zeptáme se na nejbližší silnici s tagem maxspeed v okruhu 25 metrů přímo pod naším autem
         const radius = 25;
         const query = `[out:json][timeout:3];way(around:${radius},${lat},${lon})["maxspeed"];out tags;`;
         
@@ -321,15 +340,14 @@
             const url = `${serverUrl}?data=${encodeURIComponent(query)}`;
             
             try {
-                const response = await fetchWithTimeout(url, { timeout: 2500 });
+                const response = await fetchWithTimeout(url, { timeout: 2000 });
                 if (!response.ok) throw new Error();
                 
                 const data = await response.json();
 
                 if (data.elements && data.elements.length > 0) {
-                    // Najdeme nejbližší cestu s limitem
                     let rawLimit = data.elements[0].tags.maxspeed;
-                    let limitNum = currentLimit; // Pokud selže parsování, necháme současný
+                    let limitNum = currentLimit;
 
                     if (rawLimit === "urban" || rawLimit.includes("urban")) limitNum = 50;
                     else if (rawLimit === "rural" || rawLimit.includes("rural")) limitNum = 90;
@@ -341,40 +359,55 @@
 
                     currentLimit = limitNum;
                     limitSignElement.textContent = currentLimit;
-                    showStatus("Limit aktualizován (Online)");
+                    showStatus("Online");
                     success = true;
                 } else {
-                    // Pokud pod námi zrovna žádná silnice s označeným limitem není (např. parkoviště, benzínka)
                     success = true; 
                 }
             } catch (e) {
-                console.warn(`Online dotaz na serveru ${serverUrl} selhal, zkouším záložní...`);
+                // Tiše rotujeme servery na pozadí, na displeji neukazujeme žádné otravné chyby
                 currentServerIndex = (currentServerIndex + 1) % OVERPASS_SERVERS.length;
                 attempts++;
             }
         }
 
-        if (!success) {
-            showStatus("Chyba online připojení", true);
-        }
-
         isFetching = false;
     }
 
-    function speak(text) {
-        if ('speechSynthesis' in window) {
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'en-US';
-            utterance.rate = 1.1;
-            window.speechSynthesis.speak(utterance);
+    // Čistý elektronický GONG generovaný přímo v telefonu
+    function playGongSound() {
+        try {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            // Nastavení frekvence (880Hz je čistý tón vysokého pípnutí/gongu)
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+
+            // Nastavení hlasitosti a rychlého dozvuku (fade out)
+            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+
+            osc.start(audioCtx.currentTime);
+            osc.stop(audioCtx.currentTime + 0.4);
+        } catch (e) {
+            console.error("Nepodařilo se přehrát gong:", e);
         }
     }
 
-    function triggerAlert() {
+    function triggerGong() {
         const now = Date.now();
-        if (now - lastSpokenTime > speechDelay) {
-            speak("Slow down");
-            lastSpokenTime = now;
+        if (now - lastGongTime > gongDelay) {
+            playGongSound();
+            lastGongTime = now;
         }
     }
 
