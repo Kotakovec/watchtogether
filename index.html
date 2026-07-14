@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Speed Guardian Pro</title>
+    <title>Speed Guardian Online</title>
     
     <!-- PWA Manifest -->
-    <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlNwZWVkIEd1YXJkaWFuIiwKICAic2hvcnRfbmFtZSI6ICJTcGVlZEd1YXJkIiwKICAic3RhcnRfdXJsIjogIi4iLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMwYzBjMGMiLAogICJ0aGVtZV9jb2xvciI6ICIjZmYzYjMwIiwKICAiaWNvbnMiOiBbCiAgICB7CiAgICAgICJzcmMiOiAiaHR0cHM6Ly9jZG4taWNvbnMtcG5nLmZsYXRpY29uLmNvbS81MTIvMjg3LzI4NzYyOC5wbmciLAogICAgICAidHlwZSI6ICJpbWFnZS9wbmciLAogICAgICAic2l6ZXMiOiAiNTEyeDUxMiIKICAgIH0KICAtdQpdCn0=">
+    <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlNwZWVkIEd1YXJkaWFuIiwKICAic2hvcnRfbmFtZSI6ICJTcGVlZEd1YXJkIiwKICAic3RhcnRfdXJsIjogIi4iLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMwYzBjMGMiLAogICJ0aGVtZV9jb2xvciI6ICIjZmYzYjMwIiwKICAiaWNvbnMiOiBbCiAgICB7CiAgICAgICJzcmMiOiAiaHR0cHM6Ly9jZG4taWNvbnMtcG5nLmZsYXRpY29uLmNvbS81MTIvMjg3LzI4NzYyOC5wbmciLAogICAgICAidHlwZSI6ICJpbWFnZS9wbmciLAogICAgICAidHlwZSI6ICI1MTJ4NTEyIgogICAgfQogIF0KfQ==">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
@@ -40,14 +40,12 @@
             overflow: hidden;
         }
 
-        /* Mapa přes celou horní část */
         #map {
             flex: 1;
             width: 100%;
             background-color: var(--bg-color);
         }
 
-        /* Tmavý filtr na mapové podklady */
         .leaflet-tile-container {
             filter: invert(100%) hue-rotate(180deg) brightness(60%) contrast(90%);
         }
@@ -56,7 +54,6 @@
             background: var(--bg-color) !important;
         }
 
-        /* Skrytí otravných ovládacích prvků mapy pro čistý vzhled */
         .leaflet-control-attribution {
             display: none !important;
         }
@@ -99,7 +96,6 @@
             z-index: 1001;
         }
 
-        /* Rychlostní značka (levá strana) */
         .speed-limit-sign {
             width: 85px;
             height: 85px;
@@ -116,7 +112,6 @@
             transition: border-color 0.3s ease;
         }
 
-        /* Aktuální rychlost (střed) */
         .current-speed-box {
             text-align: center;
             flex: 1;
@@ -139,7 +134,6 @@
             letter-spacing: 1px;
         }
 
-        /* Tlačítko pro zvuk (pravá strana) */
         .gong-button {
             background-color: var(--green-color);
             color: white;
@@ -168,24 +162,18 @@
 </head>
 <body>
 
-<!-- Status hlášky nahoře -->
-<div class="status-toast" id="status">Stabilizuji GPS připojení...</div>
+<div class="status-toast" id="status">Hledám GPS signál...</div>
 
-<!-- Mapa -->
 <div id="map"></div>
 
-<!-- Spodní Panel -->
 <div class="control-panel">
-    <!-- Dopravní značka s limitem -->
     <div class="speed-limit-sign" id="limit-sign">--</div>
     
-    <!-- Aktuální rychlost -->
     <div class="current-speed-box">
         <div class="speed-value" id="current-speed">0</div>
         <div class="speed-unit">KM/H</div>
     </div>
 
-    <!-- Přepínač zvuku -->
     <button class="gong-button" id="gong-btn">Gong: ZAP</button>
 </div>
 
@@ -194,13 +182,13 @@
     let speechEnabled = true;
     let currentLimit = 50; 
     let lastSpokenTime = 0;
-    const speechDelay = 3500; // Zamezení koktání hlasu
+    const speechDelay = 3500;
 
-    // Lokální databáze silnic v operační paměti
-    let localRoadsDatabase = [];
-    let lastFetchedArea = null;
+    // Řízení síťových požadavků
+    let isFetching = false;
+    let lastQueryTime = 0;
+    const minQueryInterval = 1500; // Dotaz na limit pošleme maximálně jednou za 1.5 sekundy
 
-    // Více záložních Overpass serverů pro eliminaci výpadků
     const OVERPASS_SERVERS = [
         "https://overpass-api.de/api/interpreter",
         "https://overpass.kumi.systems/api/interpreter",
@@ -214,9 +202,7 @@
     const limitSignElement = document.getElementById('limit-sign');
     const gongBtn = document.getElementById('gong-btn');
 
-    // Inicializace mapy a GPS
     function init() {
-        // Výchozí pozice Brno, dokud se nenačte GPS
         map = L.map('map', { 
             zoomControl: false,
             attributionControl: false 
@@ -224,7 +210,6 @@
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-        // Vzhled markeru pozice uživatele
         const pulseIcon = L.divIcon({
             className: 'custom-div-icon',
             html: `<div style="background-color: #0a84ff; width: 16px; height: 16px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 10px rgba(10,132,255,0.8);"></div>`,
@@ -240,7 +225,6 @@
             color: 'transparent'
         }).addTo(map);
 
-        // Zapnutí neustálého sledování polohy
         if ("geolocation" in navigator) {
             navigator.geolocation.watchPosition(onLocationSuccess, onLocationError, {
                 enableHighAccuracy: true,
@@ -252,7 +236,6 @@
         }
     }
 
-    // Obsluha tlačítka hlasu
     gongBtn.addEventListener('click', () => {
         speechEnabled = !speechEnabled;
         if (speechEnabled) {
@@ -265,33 +248,22 @@
         }
     });
 
-    // Zpracování GPS koordinátů
     async function onLocationSuccess(position) {
         const coords = position.coords;
         const lat = coords.latitude;
         const lon = coords.longitude;
 
-        // Převod rychlosti z m/s na km/h
         let speedKMH = Math.round((coords.speed || 0) * 3.6);
         if (speedKMH < 0) speedKMH = 0;
 
-        // Update UI prvků
         speedElement.textContent = speedKMH;
         userMarker.setLatLng([lat, lon]);
         accuracyCircle.setLatLng([lat, lon]).setRadius(coords.accuracy);
-        map.setView([lat, lon], 16);
+        map.setView([lat, lon], 17); // Trochu detailnější zoom pro online režim
 
-        // Načtení širšího okolí na pozadí (pokud jsme se posunuli)
-        triggerBackgroundPrefetch(lat, lon);
+        // HLAVNÍ ONLINE DOTAZ: Zeptáme se rovnou na bod, kde právě teď stojíme
+        fetchCurrentRoadLimitOnline(lat, lon);
 
-        // Bleskové porovnání s lokální staženou db
-        const matchedLimit = findLimitInLocalDatabase(lat, lon);
-        if (matchedLimit !== null) {
-            currentLimit = matchedLimit;
-            limitSignElement.textContent = currentLimit;
-        }
-
-        // Výpočet překročení rychlosti (+ 2 km/h)
         if (speedKMH >= (currentLimit + 2) && speechEnabled) {
             triggerAlert();
         }
@@ -302,7 +274,6 @@
         showStatus("Ztráta GPS signálu...", true);
     }
 
-    // Pomocná funkce pro zobrazení toast zprávy nahoře
     function showStatus(text, isError = false) {
         statusElement.textContent = text;
         if (isError) {
@@ -313,38 +284,9 @@
         statusElement.style.opacity = "1";
     }
 
-    // Haversine formula pro vzdálenost bodů v metrech
-    function getDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371000;
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-                  Math.sin(dLon/2) * Math.sin(dLon/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        return R * c;
-    }
-
-    // Vyhledání nejbližší silnice v lokální in-memory paměti
-    function findLimitInLocalDatabase(lat, lon) {
-        if (localRoadsDatabase.length === 0) return null;
-
-        let closestRoad = null;
-        let minDistance = 35; // hledáme silnici v okruhu maximálně 35 metrů
-
-        for (const road of localRoadsDatabase) {
-            const dist = getDistance(lat, lon, road.lat, road.lon);
-            if (dist < minDistance) {
-                minDistance = dist;
-                closestRoad = road;
-            }
-        }
-        return closestRoad ? closestRoad.limit : null;
-    }
-
-    // Pomocný fetch s timeoutem pro slabý mobilní signál
+    // Pomocný fetch s krátkým timeoutem, aby aplikace nevisela
     async function fetchWithTimeout(resource, options = {}) {
-        const { timeout = 6000 } = options;
+        const { timeout = 3000 } = options; // Rychlý online timeout (3s)
         const controller = new AbortController();
         const id = setTimeout(() => controller.abort(), timeout);
         try {
@@ -357,65 +299,68 @@
         }
     }
 
-    // Předstahování oblasti na pozadí ze záložních serverů
-    async function triggerBackgroundPrefetch(lat, lon) {
-        if (!lastFetchedArea || getDistance(lastFetchedArea.lat, lastFetchedArea.lon, lat, lon) > 500) {
-            lastFetchedArea = { lat, lon };
-            
-            const radius = 1000; // stahujeme 1km kruh kolem pozice
-            const query = `[out:json][timeout:10];way(around:${radius},${lat},${lon})["maxspeed"];out tags center;`;
-            
-            let success = false;
-            let attempts = 0;
+    // ČISTĚ ONLINE VYHLEDÁNÍ LIMITU PRO AKTUÁLNÍ POZICI
+    async function fetchCurrentRoadLimitOnline(lat, lon) {
+        const now = Date.now();
+        
+        // Pokud zrovna probíhá jiný dotaz nebo od posledního dotazu uběhlo příliš málo času, nezatěžujeme síť
+        if (isFetching || (now - lastQueryTime) < minQueryInterval) return;
 
-            while (!success && attempts < 3) {
-                const serverUrl = OVERPASS_SERVERS[currentServerIndex];
-                const url = `${serverUrl}?data=${encodeURIComponent(query)}`;
+        isFetching = true;
+        lastQueryTime = now;
+
+        // Zeptáme se na nejbližší silnici s tagem maxspeed v okruhu 25 metrů přímo pod naším autem
+        const radius = 25;
+        const query = `[out:json][timeout:3];way(around:${radius},${lat},${lon})["maxspeed"];out tags;`;
+        
+        let success = false;
+        let attempts = 0;
+
+        while (!success && attempts < 2) {
+            const serverUrl = OVERPASS_SERVERS[currentServerIndex];
+            const url = `${serverUrl}?data=${encodeURIComponent(query)}`;
+            
+            try {
+                const response = await fetchWithTimeout(url, { timeout: 2500 });
+                if (!response.ok) throw new Error();
                 
-                try {
-                    const response = await fetchWithTimeout(url, { timeout: 5000 });
-                    if (!response.ok) throw new Error();
-                    
-                    const data = await response.json();
+                const data = await response.json();
 
-                    if (data.elements) {
-                        const newRoads = data.elements.map(el => {
-                            let rawLimit = el.tags.maxspeed;
-                            let limitNum = 50; 
+                if (data.elements && data.elements.length > 0) {
+                    // Najdeme nejbližší cestu s limitem
+                    let rawLimit = data.elements[0].tags.maxspeed;
+                    let limitNum = currentLimit; // Pokud selže parsování, necháme současný
 
-                            if (rawLimit === "urban" || rawLimit.includes("urban")) limitNum = 50;
-                            else if (rawLimit === "rural" || rawLimit.includes("rural")) limitNum = 90;
-                            else if (rawLimit === "motorway" || rawLimit.includes("motorway")) limitNum = 130;
-                            else {
-                                const parsed = parseInt(rawLimit);
-                                if (!isNaN(parsed)) limitNum = parsed;
-                            }
-
-                            return {
-                                lat: el.center.lat,
-                                lon: el.center.lon,
-                                limit: limitNum
-                            };
-                        });
-
-                        localRoadsDatabase = [...localRoadsDatabase, ...newRoads];
-                        showStatus("Limity silnic aktualizovány.");
-                        success = true;
+                    if (rawLimit === "urban" || rawLimit.includes("urban")) limitNum = 50;
+                    else if (rawLimit === "rural" || rawLimit.includes("rural")) limitNum = 90;
+                    else if (rawLimit === "motorway" || rawLimit.includes("motorway")) limitNum = 130;
+                    else {
+                        const parsed = parseInt(rawLimit);
+                        if (!isNaN(parsed)) limitNum = parsed;
                     }
-                } catch (e) {
-                    console.warn(`Server ${serverUrl} neodpovídá, zkouším záložní...`);
-                    currentServerIndex = (currentServerIndex + 1) % OVERPASS_SERVERS.length;
-                    attempts++;
-                }
-            }
 
-            if (!success) {
-                showStatus("Chyba stahování limitů (zkusím znovu za chvíli)", true);
+                    currentLimit = limitNum;
+                    limitSignElement.textContent = currentLimit;
+                    showStatus("Limit aktualizován (Online)");
+                    success = true;
+                } else {
+                    // Pokud pod námi zrovna žádná silnice s označeným limitem není (např. parkoviště, benzínka)
+                    success = true; 
+                }
+            } catch (e) {
+                console.warn(`Online dotaz na serveru ${serverUrl} selhal, zkouším záložní...`);
+                currentServerIndex = (currentServerIndex + 1) % OVERPASS_SERVERS.length;
+                attempts++;
             }
         }
+
+        if (!success) {
+            showStatus("Chyba online připojení", true);
+        }
+
+        isFetching = false;
     }
 
-    // Text-to-Speech upozornění
     function speak(text) {
         if ('speechSynthesis' in window) {
             const utterance = new SpeechSynthesisUtterance(text);
@@ -433,7 +378,6 @@
         }
     }
 
-    // Spuštění po načtení stránky
     window.onload = init;
 
     // Registrace Service Workeru
