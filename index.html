@@ -2,528 +2,455 @@
 <html lang="cs">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<title>SPEEDGUARD // HUD</title>
-<link rel="manifest" id="manifest-link">
-<meta name="theme-color" content="#050607">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>TACHO</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
 
-  :root{
-    --bg:#050607;
-    --panel:#0b0f0f;
-    --line:#1c2626;
-    --cyan:#4dfff0;
-    --amber:#ffb020;
-    --red:#ff3b3b;
-    --dim:#5b7070;
-  }
-  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{
-    margin:0; height:100%; background:var(--bg); color:var(--cyan);
-    font-family:'Share Tech Mono', monospace; overflow:hidden;
-    user-select:none;
-  }
-  body{
-    display:flex; flex-direction:column;
-    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  @font-face {
+    font-family:'Orbitron';
+    src: local('Orbitron');
   }
 
-  /* scanline / vignette overlay */
-  .scan{
-    position:fixed; inset:0; pointer-events:none; z-index:50;
-    background:
-      repeating-linear-gradient(0deg, rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 1px, transparent 1px, transparent 3px),
-      radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.65) 100%);
-    mix-blend-mode:overlay;
+  html, body {
+    width:100%; height:100%;
+    background:#000;
+    overflow:hidden;
+    font-family:'Share Tech Mono', 'Courier New', monospace;
+    color:#0ff;
+    touch-action:none;
   }
 
-  header{
-    padding:14px 18px 8px;
-    display:flex; justify-content:space-between; align-items:baseline;
+  #app {
+    position:fixed; inset:0;
+    background:#000;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  /* ---------- PORTRAIT: jen text, žádné zbytečné svícení ---------- */
+  #portraitNotice {
+    display:none;
+    flex-direction:column;
+    align-items:center;
+    gap:14px;
+    color:#0a4a4a;
+    text-align:center;
+    padding:40px;
+  }
+  #portraitNotice .icon {
+    font-size:48px;
+    color:#0ff;
+    opacity:0.35;
+    animation:pulseDim 2.4s ease-in-out infinite;
+  }
+  #portraitNotice .msg {
     font-family:'Orbitron', sans-serif;
+    font-size:14px;
+    letter-spacing:3px;
+    color:#0ff;
+    opacity:0.5;
   }
-  header .logo{ font-size:15px; font-weight:900; letter-spacing:4px; color:var(--cyan); text-shadow:0 0 8px rgba(77,255,240,0.5);}
-  header .logo span{color:var(--dim);}
-  #clock{font-size:12px; color:var(--dim); letter-spacing:2px;}
+  @keyframes pulseDim {
+    0%,100% { opacity:0.2; }
+    50% { opacity:0.5; }
+  }
 
-  main{
-    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  /* ---------- LANDSCAPE: hlavní tacho obrazovka ---------- */
+  #dash {
     position:relative;
+    width:100%; height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
   }
 
-  .ring{
-    position:relative; width:min(78vw,340px); height:min(78vw,340px);
+  .center-speed {
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    line-height:0.9;
+  }
+
+  .speed-value {
+    position:relative;
+    font-family:'Orbitron', sans-serif;
+    font-weight:900;
+    font-size:clamp(90px, 26vw, 220px);
+    letter-spacing:-2px;
+    font-variant-numeric:tabular-nums;
+    transition:opacity 0.15s;
+    background-image:
+      repeating-linear-gradient(
+        to bottom,
+        #6be8cf 0px, #6be8cf 3px,
+        #2f8877 4px, #2f8877 5px
+      );
+    background-size: 100% 5px;
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+    filter:drop-shadow(0 0 18px rgba(107,232,207,0.35));
+  }
+
+  /* přeškrtnutá nula ve stylu displeje */
+  .speed-value .zero {
+    position:relative;
+    display:inline-block;
+  }
+  .speed-value .zero::after {
+    content:'';
+    position:absolute;
+    left:14%;
+    top:12%;
+    width:2%;
+    height:76%;
+    background:#000;
+    transform:rotate(28deg);
+    transform-origin:center;
+  }
+
+  .speed-unit {
+    font-family:'Share Tech Mono', monospace;
+    font-size:clamp(13px, 2vw, 19px);
+    letter-spacing:10px;
+    color:#7a8a87;
+    margin-top:10px;
+  }
+
+  /* dvojitý ring okolo čísla - vnější plný, vnitřní přerušovaný */
+  .ring {
+    position:absolute;
+    width:min(78vh, 68vw);
+    height:min(78vh, 68vw);
     border-radius:50%;
-    border:1px solid var(--line);
-    display:flex; align-items:center; justify-content:center;
-    box-shadow: inset 0 0 40px rgba(77,255,240,0.05);
+    border:1px solid rgba(120,140,138,0.35);
+    pointer-events:none;
   }
-  .ring::before{
-    content:''; position:absolute; inset:14px; border-radius:50%;
-    border:1px dashed var(--line);
-  }
-  .ring.warn{ border-color: var(--amber); box-shadow: inset 0 0 60px rgba(255,176,32,0.15); }
-  .ring.over{ border-color: var(--red); animation:pulse-ring 0.6s infinite; }
-  @keyframes pulse-ring{
-    0%,100%{ box-shadow: inset 0 0 60px rgba(255,59,59,0.15); }
-    50%{ box-shadow: inset 0 0 90px rgba(255,59,59,0.45); }
+  .ring::before {
+    content:'';
+    position:absolute;
+    inset:22px;
+    border-radius:50%;
+    border:1px dashed rgba(120,140,138,0.3);
   }
 
-  #speed{
-    font-family:'Orbitron', sans-serif; font-weight:900;
-    font-size:min(20vw,88px); line-height:1; color:var(--cyan);
-    text-shadow:0 0 18px rgba(77,255,240,0.55);
-    transition:color 0.2s;
-  }
-  .ring.warn #speed{ color:var(--amber); text-shadow:0 0 18px rgba(255,176,32,0.6);}
-  .ring.over #speed{ color:var(--red); text-shadow:0 0 22px rgba(255,59,59,0.75);}
-  #unit{ font-size:13px; letter-spacing:3px; color:var(--dim); margin-top:2px;}
-
-  .status-row{
-    margin-top:22px; display:flex; gap:26px; font-size:11px; letter-spacing:2px; color:var(--dim);
-  }
-  .status-row b{ color:var(--cyan); font-weight:400;}
-
-  .limit-panel{
-    padding:16px 20px calc(20px + env(safe-area-inset-bottom));
-    border-top:1px solid var(--line);
-    background:linear-gradient(180deg, transparent, rgba(77,255,240,0.03));
-  }
-  .limit-row{
-    display:flex; align-items:center; justify-content:space-between; gap:14px;
-  }
-  .limit-label{ font-size:11px; letter-spacing:3px; color:var(--dim); font-family:'Orbitron',sans-serif;}
-  .limit-controls{ display:flex; align-items:center; gap:10px;}
-  .limit-controls button{
-    width:38px; height:38px; border-radius:6px;
-    background:var(--panel); border:1px solid var(--line); color:var(--cyan);
-    font-size:20px; font-family:'Orbitron',sans-serif; cursor:pointer;
-  }
-  .limit-controls button:active{ background:var(--line); }
-  #limitVal{
-    font-family:'Orbitron',sans-serif; font-weight:700; font-size:26px; min-width:64px; text-align:center;
+  .accuracy-tick {
+    position:absolute;
+    bottom:12%;
+    font-size:10px;
+    letter-spacing:2px;
+    color:#4a5c59;
+    font-family:'Share Tech Mono', monospace;
   }
 
-  .presets{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;}
-  .presets button{
-    flex:1; min-width:50px; padding:8px 0; background:var(--panel); border:1px solid var(--line);
-    color:var(--dim); font-family:'Share Tech Mono',monospace; font-size:13px; border-radius:4px; cursor:pointer;
+  /* ---------- vpravo: ujetá vzdálenost + reset ---------- */
+  #tripPanel {
+    position:absolute;
+    right:18px;
+    top:50%;
+    transform:translateY(-50%);
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end;
+    gap:2px;
   }
-  .presets button.active{ color:var(--bg); background:var(--cyan); border-color:var(--cyan); font-weight:700;}
+  .trip-label {
+    font-family:'Orbitron', sans-serif;
+    font-size:10px;
+    letter-spacing:4px;
+    color:#065;
+  }
+  .trip-value {
+    font-family:'Orbitron', sans-serif;
+    font-size:clamp(22px, 3.4vw, 34px);
+    color:#6be8cf;
+    text-shadow:0 0 10px rgba(107,232,207,0.35);
+    font-variant-numeric:tabular-nums;
+  }
+  .trip-unit {
+    font-size:11px;
+    color:#5a6d6a;
+    letter-spacing:2px;
+    margin-bottom:14px;
+  }
 
-  .toggle-row{
-    margin-top:14px; display:flex; align-items:center; justify-content:space-between;
+  .max-label {
+    font-family:'Orbitron', sans-serif;
+    font-size:10px;
+    letter-spacing:4px;
+    color:#4a5c59;
+    margin-top:4px;
   }
-  .toggle-row .limit-label{ color:var(--dim);}
-  .switch{
-    width:46px; height:26px; border-radius:14px; background:var(--panel); border:1px solid var(--line);
-    position:relative; cursor:pointer;
+  .max-value {
+    font-family:'Orbitron', sans-serif;
+    font-size:clamp(16px, 2.4vw, 22px);
+    color:#7a8a87;
+    font-variant-numeric:tabular-nums;
   }
-  .switch::after{
-    content:''; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%;
-    background:var(--dim); transition:all 0.2s;
+  .max-unit {
+    font-size:10px;
+    color:#4a5c59;
+    letter-spacing:2px;
+    margin-bottom:10px;
   }
-  .switch.on{ border-color:var(--cyan); }
-  .switch.on::after{ left:22px; background:var(--cyan); box-shadow:0 0 8px rgba(77,255,240,0.8);}
 
-  #gpsWarn{
-    position:absolute; top:8px; left:50%; transform:translateX(-50%);
-    font-size:10px; letter-spacing:2px; color:var(--amber); display:none;
+  #resetBtn {
+    margin-top:4px;
+    background:transparent;
+    border:1px solid rgba(107,232,207,0.15);
+    color:#4a5c59;
+    font-family:'Share Tech Mono', monospace;
+    font-size:10px;
+    letter-spacing:3px;
+    padding:8px 14px;
+    border-radius:2px;
+    clip-path:polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+    transition:all 0.15s;
+  }
+  #resetBtn:active {
+    color:#6be8cf;
+    border-color:rgba(107,232,207,0.5);
+    background:rgba(107,232,207,0.06);
   }
 
-  #startOverlay{
-    position:fixed; inset:0; background:var(--bg); z-index:100;
-    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:30px; text-align:center;
+  /* ---------- vlevo dole: mapa (zatím placeholder) ---------- */
+  #mapBtn {
+    position:absolute;
+    left:18px;
+    bottom:18px;
+    width:52px;
+    height:52px;
+    background:transparent;
+    border:1px solid rgba(107,232,207,0.15);
+    color:#4a5c59;
+    border-radius:2px;
+    clip-path:polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:20px;
+    transition:all 0.15s;
   }
-  #startOverlay .logo{ font-family:'Orbitron',sans-serif; font-size:22px; font-weight:900; letter-spacing:6px; color:var(--cyan); text-shadow:0 0 12px rgba(77,255,240,0.6);}
-  #startOverlay p{ color:var(--dim); font-size:13px; max-width:280px; line-height:1.6;}
-  #startBtn{
-    font-family:'Orbitron',sans-serif; font-weight:700; letter-spacing:3px;
-    background:transparent; border:1px solid var(--cyan); color:var(--cyan);
-    padding:14px 30px; border-radius:4px; font-size:13px; cursor:pointer;
+  #mapBtn:active {
+    color:#6be8cf;
+    border-color:rgba(107,232,207,0.5);
+    background:rgba(107,232,207,0.06);
   }
-  #startBtn:active{ background:rgba(77,255,240,0.15); }
+
+  /* ---------- stav vlevo nahoře (GPS status) ---------- */
+  #gpsStatus {
+    position:absolute;
+    left:18px;
+    top:16px;
+    font-size:10px;
+    letter-spacing:2px;
+    color:#4a5c59;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  #gpsDot {
+    width:6px; height:6px;
+    border-radius:50%;
+    background:#2a3a38;
+    transition:background 0.3s;
+  }
+  #gpsDot.live {
+    background:#6be8cf;
+    box-shadow:0 0 8px #6be8cf;
+  }
+  #gpsDot.warn {
+    background:#a55;
+    box-shadow:0 0 6px #a55;
+  }
+
+  /* skryj vše mimo landscape flow gracefully */
+  @media (orientation: portrait) {
+    #dash { display:none; }
+    #portraitNotice { display:flex; }
+  }
 </style>
 </head>
 <body>
 
-<div class="scan"></div>
+<div id="app">
 
-<div id="startOverlay">
-  <div class="logo">SPEEDGUARD</div>
-  <p>Hlídání rychlosti přes GPS. Nastav limit a app tě zvukově upozorní, když ho překročíš. Vyžaduje povolení polohy.</p>
-  <button id="startBtn">SPUSTIT MONITOR</button>
-</div>
+  <div id="portraitNotice">
+    <div class="icon">⟳</div>
+    <div class="msg">OTOČ TELEFON<br>NA ŠÍŘKU</div>
+  </div>
 
-<header>
-  <div class="logo">SPEED<span>GUARD</span></div>
-  <div id="clock">--:--:--</div>
-</header>
+  <div id="dash">
+    <div id="gpsStatus"><div id="gpsDot"></div><span id="gpsText">HLEDÁM GPS</span></div>
 
-<main>
-  <div id="gpsWarn">GPS SIGNÁL SLABÝ</div>
-  <div class="ring" id="ring">
-    <div style="text-align:center;">
-      <div id="speed">0</div>
-      <div id="unit">KM/H</div>
+    <div class="ring"></div>
+    <div class="center-speed">
+      <div class="speed-value" id="speedValue">0</div>
+      <div class="speed-unit">KM/H</div>
     </div>
-  </div>
-  <div class="status-row">
-    <div>LIMIT <b id="limitEcho">50</b></div>
-    <div>PŘESNOST <b id="accEcho">--</b></div>
-    <div>STAV <b id="stateEcho">OK</b></div>
-  </div>
-</main>
+    <div class="accuracy-tick" id="accTick"></div>
 
-<div class="limit-panel">
-  <div class="limit-row">
-    <div class="limit-label">LIMIT ÚSEKU</div>
-    <div class="limit-controls">
-      <button id="minus">−</button>
-      <div id="limitVal">50</div>
-      <button id="plus">+</button>
+    <div id="tripPanel">
+      <div class="trip-label">TRASA</div>
+      <div class="trip-value" id="tripValue">0.00</div>
+      <div class="trip-unit">KM</div>
+      <div class="max-label">MAX</div>
+      <div class="max-value" id="maxSpeedVal">0</div>
+      <div class="max-unit">KM/H</div>
+      <button id="resetBtn">RESET</button>
     </div>
+
+    <button id="mapBtn" title="Mapa (brzy)">🗺</button>
   </div>
-  <div class="presets">
-    <button data-v="30">30</button>
-    <button data-v="50" class="active">50</button>
-    <button data-v="70">70</button>
-    <button data-v="90">90</button>
-    <button data-v="130">130</button>
-  </div>
-  <div class="toggle-row">
-    <div class="limit-label">ZVUK (BMW SEATBELT STYL)</div>
-    <div class="switch on" id="soundSwitch"></div>
-  </div>
-  <div class="toggle-row">
-    <div class="limit-label">AUTO LIMIT (Z MAPY)</div>
-    <div class="switch" id="autoSwitch"></div>
-  </div>
-  <div id="autoInfo" style="display:none; font-size:10px; letter-spacing:1px; color:var(--dim); margin-top:8px; text-align:right;">ZDROJ: --</div>
-  <div id="zoneInfo" style="display:none; font-size:11px; letter-spacing:2px; color:var(--amber); margin-top:6px; text-align:right; font-family:'Orbitron',sans-serif; font-weight:700;">--</div>
+
 </div>
 
 <script>
-// ---------- PWA manifest (inline, no separate file needed) ----------
-const manifest = {
-  name: "SpeedGuard",
-  short_name: "SpeedGuard",
-  start_url: ".",
-  display: "fullscreen",
-  background_color: "#050607",
-  theme_color: "#050607",
-  icons: []
-};
-document.getElementById('manifest-link').href =
-  'data:application/manifest+json,' + encodeURIComponent(JSON.stringify(manifest));
+(function(){
+  const speedEl = document.getElementById('speedValue');
+  const tripEl = document.getElementById('tripValue');
+  const gpsDot = document.getElementById('gpsDot');
+  const gpsText = document.getElementById('gpsText');
+  const accTick = document.getElementById('accTick');
+  const maxSpeedVal = document.getElementById('maxSpeedVal');
+  const resetBtn = document.getElementById('resetBtn');
+  const mapBtn = document.getElementById('mapBtn');
 
-// service worker for basic offline/installable behavior
-if ('serviceWorker' in navigator) {
-  const swCode = `
-    self.addEventListener('install', e => self.skipWaiting());
-    self.addEventListener('activate', e => self.clients.claim());
-    self.addEventListener('fetch', e => {});
-  `;
-  const blob = new Blob([swCode], {type:'application/javascript'});
-  navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
-}
+  let tripMeters = parseFloat(localStorage.getItem('tacho_trip') || '0');
+  let maxSpeed = parseFloat(localStorage.getItem('tacho_max') || '0');
+  let lastPos = null;
+  let watchId = null;
 
-// ---------- State ----------
-let limit = 50;
-let soundOn = true;
-let watchId = null;
-let audioCtx = null;
-let beepInterval = null;
-let lastBeepState = 'ok';
-let wakeLock = null;
+  function toRad(d){ return d * Math.PI / 180; }
 
-const speedEl = document.getElementById('speed');
-const ringEl = document.getElementById('ring');
-const limitValEl = document.getElementById('limitVal');
-const limitEchoEl = document.getElementById('limitEcho');
-const accEchoEl = document.getElementById('accEcho');
-const stateEchoEl = document.getElementById('stateEcho');
-const gpsWarnEl = document.getElementById('gpsWarn');
-const clockEl = document.getElementById('clock');
-
-function setLimit(v){
-  limit = Math.max(5, Math.min(150, v));
-  limitValEl.textContent = limit;
-  limitEchoEl.textContent = limit;
-  document.querySelectorAll('.presets button').forEach(b=>{
-    b.classList.toggle('active', parseInt(b.dataset.v)===limit);
-  });
-}
-document.getElementById('plus').onclick = ()=>setLimit(limit+5);
-document.getElementById('minus').onclick = ()=>setLimit(limit-5);
-document.querySelectorAll('.presets button').forEach(b=>{
-  b.onclick = ()=>setLimit(parseInt(b.dataset.v));
-});
-
-const soundSwitch = document.getElementById('soundSwitch');
-soundSwitch.onclick = ()=>{
-  soundOn = !soundOn;
-  soundSwitch.classList.toggle('on', soundOn);
-  if(!soundOn) stopBeep();
-};
-
-// ---------- AUTO limit (Overpass / OSM maxspeed lookup) ----------
-let autoMode = false;
-let lastManualLimit = limit;
-let autoFetchBusy = false;
-let lastAutoFetch = 0;
-const autoSwitch = document.getElementById('autoSwitch');
-const autoInfo = document.getElementById('autoInfo');
-const limitControls = document.querySelector('.limit-controls');
-const presetsEl = document.querySelector('.presets');
-
-autoSwitch.onclick = ()=>{
-  autoMode = !autoMode;
-  autoSwitch.classList.toggle('on', autoMode);
-  autoInfo.style.display = autoMode ? 'block' : 'none';
-  limitControls.style.opacity = autoMode ? '0.35' : '1';
-  presetsEl.style.opacity = autoMode ? '0.35' : '1';
-  limitControls.style.pointerEvents = autoMode ? 'none' : 'auto';
-  presetsEl.style.pointerEvents = autoMode ? 'none' : 'auto';
-  if(autoMode){
-    lastManualLimit = limit;
-    autoInfo.textContent = 'ZDROJ: HLEDÁM...';
-  } else {
-    setLimit(lastManualLimit);
+  // Haversine - vzdálenost mezi dvěma GPS body v metrech
+  function distanceMeters(lat1, lon1, lat2, lon2){
+    const R = 6371000;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
   }
-};
 
-async function fetchSpeedLimitNear(lat, lon){
-  // nearest road of any kind within 40m — do NOT require maxspeed tag,
-  // since most Czech roads outside main routes don't have it set
-  const q = `[out:json][timeout:10];
-    way(around:40,${lat},${lon})[highway];
-    out tags center 5;`;
-  const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(q);
-  const res = await fetch(url);
-  if(!res.ok) throw new Error('overpass ' + res.status);
-  const data = await res.json();
-  if(!data.elements || !data.elements.length) return null;
+  function renderTrip(){
+    tripEl.textContent = (tripMeters / 1000).toFixed(2);
+  }
+  function renderMax(){
+    maxSpeedVal.textContent = Math.round(maxSpeed);
+  }
+  renderTrip();
+  renderMax();
 
-  // prefer ways that actually have a maxspeed tag, otherwise take the first
-  const withTag = data.elements.find(e => e.tags && e.tags.maxspeed);
-  const el = withTag || data.elements[0];
-  const tags = el.tags || {};
-  const roadName = tags.name || tags.ref || (tags.highway ? czechHighwayLabel(tags.highway) : 'úsek bez názvu');
-  const hw = tags.highway;
+  function renderSpeedDigits(v){
+    // nula se vykresluje jako přeškrtnutá (span.zero), ostatní číslice normálně
+    speedEl.innerHTML = String(v).split('').map(ch =>
+      ch === '0' ? '<span class="zero">0</span>' : ch
+    ).join('');
+  }
+  renderSpeedDigits(0);
 
-  // ---- 1) determine ZONE first (this is what drives both label + fallback limit) ----
-  let zone = null; // 'dalnice' | 'rychlostni' | 'obytna' | 'v_obci' | 'mimo_obec'
+  function setSpeed(kmh){
+    const v = Math.max(0, Math.round(kmh));
+    renderSpeedDigits(v);
+    if (v > maxSpeed){
+      maxSpeed = v;
+      localStorage.setItem('tacho_max', maxSpeed);
+      renderMax();
+    }
+  }
 
-  // maxspeed:type / zone:traffic tags are the most reliable explicit signal in CZ data
-  const zoneTag = tags['maxspeed:type'] || tags['zone:traffic'] || '';
-  if(/motorway/i.test(zoneTag)) zone = 'dalnice';
-  else if(/trunk/i.test(zoneTag)) zone = 'rychlostni';
-  else if(/urban/i.test(zoneTag)) zone = 'v_obci';
-  else if(/rural/i.test(zoneTag)) zone = 'mimo_obec';
+  function handlePosition(pos){
+    gpsDot.classList.add('live');
+    gpsDot.classList.remove('warn');
+    gpsText.textContent = 'GPS AKTIVNÍ';
 
-  if(!zone){
-    if(hw === 'motorway' || hw === 'motorway_link') zone = 'dalnice';
-    else if(hw === 'trunk' || hw === 'trunk_link') zone = 'rychlostni';
-    else if(hw === 'living_street') zone = 'obytna';
-    else if(hw === 'residential' || hw === 'service' || hw === 'unclassified'){
-      zone = 'v_obci'; // these road classes only exist inside built-up areas in CZ OSM tagging
+    const { latitude, longitude, speed, accuracy } = pos.coords;
+    accTick.textContent = '±' + Math.round(accuracy) + 'm';
+
+    // rychlost: preferuj speed z GPS (m/s), fallback na vlastní výpočet
+    let kmh;
+    if (speed !== null && speed !== undefined && !isNaN(speed)){
+      kmh = speed * 3.6;
+    } else if (lastPos){
+      const dt = (pos.timestamp - lastPos.timestamp) / 1000;
+      const d = distanceMeters(lastPos.lat, lastPos.lon, latitude, longitude);
+      kmh = dt > 0 ? (d/dt) * 3.6 : 0;
     } else {
-      // primary/secondary/tertiary can be either — check surroundings for settlement
-      const urban = await isNearSettlement(lat, lon);
-      zone = urban ? 'v_obci' : 'mimo_obec';
+      kmh = 0;
     }
-  }
+    setSpeed(kmh);
 
-  // ---- 2) limit value: explicit tag wins, else Czech legal default per zone ----
-  let limitVal = null;
-  let source = 'odhad podle úseku';
-  if(tags.maxspeed){
-    const parsed = parseInt(tags.maxspeed);
-    if(!isNaN(parsed)){ limitVal = parsed; source = 'dopravní značení (OSM)'; }
-  }
-  if(limitVal == null){
-    const defaults = { dalnice:130, rychlostni:110, obytna:20, v_obci:50, mimo_obec:90 };
-    limitVal = defaults[zone];
-  }
-
-  return { limit: limitVal, name: roadName, source, zone };
-}
-
-function czechHighwayLabel(hw){
-  const map = {
-    motorway:'dálnice', trunk:'rychlostní silnice', primary:'silnice I. třídy',
-    secondary:'silnice II. třídy', tertiary:'silnice III. třídy',
-    residential:'místní komunikace', living_street:'obytná zóna', service:'účelová komunikace'
-  };
-  return map[hw] || 'silnice';
-}
-
-async function isNearSettlement(lat, lon){
-  try{
-    const q = `[out:json][timeout:8];
-      (
-        way(around:80,${lat},${lon})[landuse=residential];
-        way(around:80,${lat},${lon})[building];
-        node(around:80,${lat},${lon})[place];
-      );
-      out tags 3;`;
-    const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(q);
-    const res = await fetch(url);
-    if(!res.ok) return false;
-    const data = await res.json();
-    return !!(data.elements && data.elements.length);
-  }catch(e){
-    return false;
-  }
-}
-
-async function autoUpdateLimit(lat, lon){
-  const now = Date.now();
-  if(autoFetchBusy || now - lastAutoFetch < 15000) return; // throttle: max once/15s
-  autoFetchBusy = true;
-  lastAutoFetch = now;
-  try{
-    const result = await fetchSpeedLimitNear(lat, lon);
-    if(result){
-      setLimit(result.limit);
-      autoInfo.textContent = 'ZDROJ: ' + result.name.toUpperCase() + ' — ' + result.source.toUpperCase() + ' (' + result.limit + ')';
-    } else {
-      autoInfo.textContent = 'ZDROJ: NEZNÁMÝ, PONECHÁVÁM ' + limit;
+    // trasa - jen pokud je přesnost slušná a pohyb je reálný (filtr GPS šumu)
+    if (lastPos && accuracy < 30){
+      const d = distanceMeters(lastPos.lat, lastPos.lon, latitude, longitude);
+      if (d > 1 && d < 200){ // odfiltruje šum a skoky
+        tripMeters += d;
+        localStorage.setItem('tacho_trip', tripMeters);
+        renderTrip();
+      }
     }
-  }catch(e){
-    autoInfo.textContent = 'ZDROJ: OFFLINE / CHYBA';
-  }finally{
-    autoFetchBusy = false;
-  }
-}
 
-function tickClock(){
-  const d = new Date();
-  clockEl.textContent = d.toLocaleTimeString('cs-CZ', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-}
-setInterval(tickClock, 1000);
-tickClock();
-
-// ---------- Audio: BMW seatbelt-style warning beep ----------
-function ensureAudio(){
-  if(!audioCtx){
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  if(audioCtx.state === 'suspended') audioCtx.resume();
-}
-
-function playBeep(){
-  ensureAudio();
-  const now = audioCtx.currentTime;
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = 'square';
-  osc.frequency.setValueAtTime(2200, now);
-  gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(0.35, now + 0.005);
-  gain.gain.linearRampToValueAtTime(0, now + 0.09);
-  osc.connect(gain).connect(audioCtx.destination);
-  osc.start(now);
-  osc.stop(now + 0.1);
-}
-
-function startBeep(intervalMs){
-  stopBeep();
-  playBeep();
-  beepInterval = setInterval(playBeep, intervalMs);
-}
-function stopBeep(){
-  if(beepInterval){ clearInterval(beepInterval); beepInterval = null; }
-}
-
-// ---------- Geolocation ----------
-function msToKmh(ms){ return ms==null ? 0 : ms*3.6; }
-
-function handlePosition(pos){
-  const c = pos.coords;
-  const kmh = c.speed != null ? msToKmh(c.speed) : null;
-
-  accEchoEl.textContent = c.accuracy ? Math.round(c.accuracy)+'m' : '--';
-  gpsWarnEl.style.display = (c.accuracy && c.accuracy > 30) ? 'block' : 'none';
-
-  if(autoMode){
-    autoUpdateLimit(c.latitude, c.longitude);
+    lastPos = { lat: latitude, lon: longitude, timestamp: pos.timestamp };
   }
 
-  if(kmh == null){
-    stateEchoEl.textContent = 'ČEKÁM';
-    return;
+  function handleError(err){
+    gpsDot.classList.remove('live');
+    gpsDot.classList.add('warn');
+    gpsText.textContent = 'GPS CHYBA: ' + err.message;
   }
 
-  const shown = Math.round(kmh);
-  speedEl.textContent = shown;
-
-  const over = kmh - limit;
-  let newState = 'ok';
-  if(over >= 10) newState = 'over';
-  else if(over >= 2) newState = 'warn';
-
-  ringEl.classList.remove('warn','over');
-  if(newState === 'over'){
-    ringEl.classList.add('over');
-    stateEchoEl.textContent = 'PŘEKROČENO';
-    if(soundOn){
-      if(lastBeepState !== 'over') startBeep(160);
-    } else stopBeep();
-  } else if(newState === 'warn'){
-    ringEl.classList.add('warn');
-    stateEchoEl.textContent = 'POZOR';
-    if(soundOn){
-      if(lastBeepState !== 'warn') startBeep(750);
-    } else stopBeep();
-  } else {
-    stateEchoEl.textContent = 'OK';
-    stopBeep();
+  function startGPS(){
+    if (!('geolocation' in navigator)){
+      gpsText.textContent = 'GPS NENÍ DOSTUPNÉ';
+      gpsDot.classList.add('warn');
+      return;
+    }
+    watchId = navigator.geolocation.watchPosition(handlePosition, handleError, {
+      enableHighAccuracy: true,
+      maximumAge: 500,
+      timeout: 8000
+    });
   }
-  lastBeepState = newState;
-}
+  startGPS();
 
-function handleError(err){
-  stateEchoEl.textContent = 'GPS CHYBA';
-  gpsWarnEl.style.display = 'block';
-  gpsWarnEl.textContent = 'GPS NEDOSTUPNÉ: ' + err.message;
-}
-
-function startWatch(){
-  if(!('geolocation' in navigator)){
-    stateEchoEl.textContent = 'BEZ GPS';
-    return;
-  }
-  watchId = navigator.geolocation.watchPosition(handlePosition, handleError, {
-    enableHighAccuracy: true,
-    maximumAge: 1000,
-    timeout: 10000
+  resetBtn.addEventListener('click', () => {
+    tripMeters = 0;
+    maxSpeed = 0;
+    localStorage.setItem('tacho_trip', 0);
+    localStorage.setItem('tacho_max', 0);
+    renderTrip();
+    renderMax();
   });
-}
 
-async function requestWakeLock(){
-  try{
-    if('wakeLock' in navigator){
-      wakeLock = await navigator.wakeLock.request('screen');
-    }
-  }catch(e){}
-}
-document.addEventListener('visibilitychange', ()=>{
-  if(document.visibilityState === 'visible' && watchId != null) requestWakeLock();
-});
+  mapBtn.addEventListener('click', () => {
+    // placeholder - mapa přijde později
+    mapBtn.style.color = '#0ff';
+    setTimeout(() => { mapBtn.style.color = ''; }, 200);
+  });
 
-// ---------- Start flow ----------
-document.getElementById('startBtn').onclick = ()=>{
-  ensureAudio();
-  playBeep();
-  startWatch();
+  // zabránit zhasnutí obrazovky, pokud to prohlížeč podporuje
+  let wakeLock = null;
+  async function requestWakeLock(){
+    try {
+      if ('wakeLock' in navigator){
+        wakeLock = await navigator.wakeLock.request('screen');
+      }
+    } catch(e){ /* tichý fail, není kritické */ }
+  }
   requestWakeLock();
-  document.getElementById('startOverlay').style.display = 'none';
-};
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') requestWakeLock();
+  });
 
-setLimit(50);
+})();
 </script>
+
 </body>
 </html>
