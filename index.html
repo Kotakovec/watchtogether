@@ -6,6 +6,9 @@
 <meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.png">
 <title>TACHO</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
@@ -24,12 +27,20 @@
     touch-action:none;
   }
 
+  /* vynutí černou barvu i pod výřezem na foťák / do bezpečných zón displeje */
+  html {
+    background:#000;
+  }
+
   #app {
-    position:fixed; inset:0;
+    position:fixed;
+    top:0; left:0; right:0; bottom:0;
+    width:100vw; height:100vh;
     background:#000;
     display:flex;
     align-items:center;
     justify-content:center;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
 
   /* ---------- PORTRAIT: jen text, žádné zbytečné svícení ---------- */
@@ -88,14 +99,14 @@
     background-image:
       repeating-linear-gradient(
         to bottom,
-        #6be8cf 0px, #6be8cf 3px,
-        #2f8877 4px, #2f8877 5px
+        #8ff5e0 0px, #8ff5e0 3px,
+        #4fc9ac 4px, #4fc9ac 5px
       );
     background-size: 100% 5px;
     -webkit-background-clip:text;
     background-clip:text;
     color:transparent;
-    filter:drop-shadow(0 0 18px rgba(107,232,207,0.35));
+    filter:drop-shadow(0 0 16px rgba(139,255,224,0.7)) drop-shadow(0 0 40px rgba(107,232,207,0.35));
   }
 
   /* přeškrtnutá nula ve stylu displeje */
@@ -448,6 +459,15 @@
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') requestWakeLock();
   });
+
+  // registrace service workeru - umožní běh appky úplně offline po první instalaci
+  if ('serviceWorker' in navigator){
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {
+        // tichý fail - appka funguje i bez SW, jen nebude cachovaná pro offline
+      });
+    });
+  }
 
 })();
 </script>
